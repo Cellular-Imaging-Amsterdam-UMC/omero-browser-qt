@@ -1,0 +1,86 @@
+site_name: omero-browser-qt
+site_description: Reusable PyQt6 dialog for browsing and retrieving images from OMERO via ICE
+site_url: https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/
+repo_url: https://github.com/Cellular-Imaging-Amsterdam-UMC/omero-browser-qt
+repo_name: omero-browser-qt
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            members_order: source
+            docstring_style: numpy
+            merge_init_into_class: true
+            show_signature_annotations: true
+            separate_signature: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - User Guide:
+      - Browser Dialog: user-guide/browser-dialog.md
+      - Pixel Loading: user-guide/pixel-loading.md
+      - WEB Backend: user-guide/web-backend.md
+      - 3D Volume Viewer: user-guide/viewer-3d.md
+      - Display Settings: user-guide/display-settings.md
+  - API Reference:
+      - Overview: api/index.md
+      - OmeroBrowserDialog: api/browser_dialog.md
+      - OmeroGateway: api/gateway.md
+      - Image Loading: api/image_loader.md
+      - Rendering: api/rendering.md
+      - View Backends: api/view_backends.md
+      - Web Client: api/webclient.md
+      - Selection Context: api/selection_context.md
+      - Tree Model: api/tree_model.md
+      - Scale Bar: api/scale_bar.md
+  - Examples:
+      - Overview: examples/index.md
+      - Simple Selection: examples/simple-selection.md
+      - Structured Selection: examples/structured-selection.md
+      - Pixel Loading: examples/pixel-loading.md
+      - Demo Viewer: examples/demo-viewer.md
+  - Changelog: changelog.md
+  - Contributing: contributing.md

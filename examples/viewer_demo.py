@@ -2,18 +2,7 @@
 """
 viewer_demo.py — Minimal multi-channel image viewer that demonstrates
 the ``omero-browser-qt`` reusable dialog.
-
-Keeps from gui_deconvolve_ci.py:
-  * ZoomableImageView (single window)
-  * Multi-channel compositing (_composite_to_pixmap)
-  * Channel toggle buttons (dynamic, coloured by emission wavelength)
-  * Projection combo (Slice / MIP / SUM)
-  * Z-slider
-  * Lo% / Hi% contrast sliders with percentile caching
-  * Open from OMERO
-
-Removed:
-  * Deconvolution, PSF, optics, second viewer, resource monitor, settings
+This example shows how to use the library's tile-based rendering API to
 """
 
 from __future__ import annotations
@@ -25,9 +14,8 @@ from functools import lru_cache
 from typing import Any
 
 import numpy as np
-from PyQt6.QtCore import QRectF, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import QPointF, QRectF, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import (
-    QAction,
     QBrush,
     QColor,
     QIcon,
@@ -38,24 +26,38 @@ from PyQt6.QtGui import (
     QRadialGradient,
 )
 from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
     QApplication,
     QComboBox,
     QDoubleSpinBox,
+    QFrame,
     QGraphicsObject,
     QGraphicsPixmapItem,
     QGraphicsScene,
     QGraphicsView,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QProgressBar,
     QSlider,
+    QStackedWidget,
     QStatusBar,
-    QToolBar,
     QVBoxLayout,
     QWidget,
 )
+
+# Optional 3D volume rendering via vispy
+try:
+    from vispy import scene as vispy_scene
+    from vispy.color import BaseColormap
+    from vispy.visuals.transforms import STTransform
+
+    _HAS_VISPY = True
+except ImportError:
+    _HAS_VISPY = False
 
 # ======================================================================
 # Colour helpers
@@ -69,6 +71,23 @@ _FALLBACK_PALETTE = [
     (0, 0, 255),
     (255, 255, 0),
 ]
+
+_PROJECTION_MODES = [
+    "Slice",
+    "MIP",
+    "SUM",
+    "Mean",
+    "Median",
+    "Extended Focus",
+    "Local Contrast",
+]
+
+_SLOW_PROJECTION_MODES = {"Mean", "Median", "Extended Focus", "Local Contrast"}
+_PROGRESS_Z_STEP = 5
+
+
+class _RenderCancelled(RuntimeError):
+    """Raised when an in-flight render becomes stale."""
 
 
 def _emission_to_rgb(nm: float) -> tuple[int, int, int]:
@@ -227,12 +246,199 @@ def _composite_to_pixmap(
     return pix
 
 
+def _preview_stride_for_shape(shape: tuple[int, ...]) -> int:
+    """Choose a simple decimation factor for quick preview rendering."""
+    if len(shape) < 2:
+        return 1
+    h, w = shape[-2], shape[-1]
+    longest = max(h, w)
+    if longest >= 4096:
+        return 8
+    if longest >= 2048:
+        return 4
+    if longest >= 1024:
+        return 2
+    return 1
+
+
+def _downsample_stack_for_preview(stack: np.ndarray) -> np.ndarray:
+    """Return a cheap strided preview of a ``(Z, Y, X)`` stack."""
+    stride = _preview_stride_for_shape(stack.shape)
+    if stride <= 1:
+        return stack
+    return stack[:, ::stride, ::stride]
+
+
+def _neighbor_sum(arr: np.ndarray) -> np.ndarray:
+    """Return the 3x3 neighborhood sum using edge padding."""
+    pad = np.pad(arr, 1, mode="edge")
+    return (
+        pad[:-2, :-2] + pad[:-2, 1:-1] + pad[:-2, 2:]
+        + pad[1:-1, :-2] + pad[1:-1, 1:-1] + pad[1:-1, 2:]
+        + pad[2:, :-2] + pad[2:, 1:-1] + pad[2:, 2:]
+    )
+
+
+def _laplacian_metric(arr: np.ndarray) -> np.ndarray:
+    pad = np.pad(arr, 1, mode="edge")
+    return np.abs(
+        -4.0 * pad[1:-1, 1:-1]
+        + pad[:-2, 1:-1]
+        + pad[2:, 1:-1]
+        + pad[1:-1, :-2]
+        + pad[1:-1, 2:]
+    )
+
+
+def _local_contrast_metric(arr: np.ndarray) -> np.ndarray:
+    local_mean = _neighbor_sum(arr) / 9.0
+    local_mean_sq = _neighbor_sum(arr * arr) / 9.0
+    variance = np.maximum(local_mean_sq - local_mean * local_mean, 0.0)
+    return np.sqrt(variance)
+
+
+def _focus_fuse(stack: np.ndarray, *, metric: str, progress=None) -> np.ndarray:
+    """Fuse a (Z, Y, X) stack using a per-plane sharpness metric."""
+    if stack.shape[0] == 1:
+        return stack[0].astype(np.float64, copy=False)
+
+    stack_f = stack.astype(np.float64, copy=False)
+    metric_fn = _laplacian_metric if metric == "laplacian" else _local_contrast_metric
+    total = stack_f.shape[0] + 1
+    measures = []
+    for i, plane in enumerate(stack_f, start=1):
+        measures.append(metric_fn(plane))
+        if progress is not None and (i % _PROGRESS_Z_STEP == 0 or i == stack_f.shape[0]):
+            progress(i, total)
+    measures = np.stack(measures, axis=0)
+    best_idx = np.argmax(measures, axis=0, keepdims=True)
+    if progress is not None:
+        progress(total, total)
+    return np.take_along_axis(stack_f, best_idx, axis=0)[0]
+
+
+def _project_stack(stack: np.ndarray, mode: str, z_index: int, progress=None) -> np.ndarray:
+    """Project a (Z, Y, X) stack to a single (Y, X) plane."""
+    if stack.ndim != 3:
+        raise ValueError(f"Expected a 3-D stack, got shape {stack.shape}")
+
+    if mode == "Slice":
+        z = max(0, min(z_index, stack.shape[0] - 1))
+        return stack[z]
+    if mode == "MIP":
+        return stack.max(axis=0)
+    if mode == "SUM":
+        return stack.sum(axis=0).astype(np.float64)
+    if mode == "Mean":
+        acc = np.zeros(stack.shape[1:], dtype=np.float64)
+        total = stack.shape[0]
+        for i, plane in enumerate(stack, start=1):
+            acc += plane
+            if progress is not None and (i % _PROGRESS_Z_STEP == 0 or i == total):
+                progress(i, total)
+        return acc / total
+    if mode == "Median":
+        total = 3
+        if progress is not None:
+            progress(1, total)
+        stack_f = stack.astype(np.float64, copy=False)
+        if progress is not None:
+            progress(2, total)
+        result = np.median(stack_f, axis=0)
+        if progress is not None:
+            progress(3, total)
+        return result
+    if mode == "Extended Focus":
+        return _focus_fuse(stack, metric="laplacian", progress=progress)
+    if mode == "Local Contrast":
+        return _focus_fuse(stack, metric="local_contrast", progress=progress)
+    raise ValueError(f"Unknown projection mode: {mode}")
+
+
+def _projection_step_count(stack: np.ndarray, mode: str) -> int:
+    if stack.ndim != 3:
+        return 1
+    if mode == "Mean":
+        return max(stack.shape[0], 1)
+    if mode in {"Extended Focus", "Local Contrast"}:
+        return max(stack.shape[0] + 1, 1)
+    if mode == "Median":
+        return 3
+    return 1
+
+
+def _project_rgb_stack(stack: np.ndarray, mode: str, z_index: int, progress=None) -> np.ndarray:
+    """Project a (Z, H, W, 3) RGB stack to a single (H, W, 3) plane."""
+    if stack.ndim != 4 or stack.shape[-1] != 3:
+        raise ValueError(f"Expected (Z, H, W, 3) RGB stack, got shape {stack.shape}")
+
+    if mode == "Slice":
+        z = max(0, min(z_index, stack.shape[0] - 1))
+        return stack[z]
+    if mode == "MIP":
+        return stack.max(axis=0)
+    if mode == "SUM":
+        return np.clip(stack.astype(np.float64).sum(axis=0), 0, 255).astype(np.uint8)
+    if mode == "Mean":
+        acc = np.zeros(stack.shape[1:], dtype=np.float64)
+        total = stack.shape[0]
+        for i in range(total):
+            acc += stack[i]
+            if progress is not None and ((i + 1) % _PROGRESS_Z_STEP == 0 or (i + 1) == total):
+                progress(i + 1, total)
+        return (acc / total).astype(np.uint8)
+    if mode == "Median":
+        total = 3
+        if progress is not None:
+            progress(1, total)
+        result = np.median(stack.astype(np.float64), axis=0)
+        if progress is not None:
+            progress(2, total)
+        result = result.astype(np.uint8)
+        if progress is not None:
+            progress(3, total)
+        return result
+    if mode in ("Extended Focus", "Local Contrast"):
+        # Compute sharpness metric on grayscale, then pick from RGB stack
+        grey = np.mean(stack.astype(np.float64), axis=-1)  # (Z, H, W)
+        metric_fn = _laplacian_metric if mode == "Extended Focus" else _local_contrast_metric
+        total = grey.shape[0] + 1
+        measures = []
+        for i in range(grey.shape[0]):
+            measures.append(metric_fn(grey[i]))
+            if progress is not None and ((i + 1) % _PROGRESS_Z_STEP == 0 or (i + 1) == grey.shape[0]):
+                progress(i + 1, total)
+        measures = np.stack(measures, axis=0)
+        best_idx = np.argmax(measures, axis=0)
+        if progress is not None:
+            progress(total, total)
+        # Gather best-focus pixel from each Z for each RGB channel
+        h, w = best_idx.shape
+        result = np.empty((h, w, 3), dtype=stack.dtype)
+        for c in range(3):
+            result[..., c] = np.take_along_axis(
+                stack[..., c], best_idx[np.newaxis, ...], axis=0
+            )[0]
+        return result
+    raise ValueError(f"Unknown projection mode: {mode}")
+
+
+def _rgb_array_to_pixmap(arr: np.ndarray) -> QPixmap:
+    """Convert an (H, W, 3) uint8 RGB array to a QPixmap."""
+    h, w = arr.shape[:2]
+    rgb = np.ascontiguousarray(arr)
+    qimg = QImage(rgb.data, w, h, 3 * w, QImage.Format.Format_RGB888)
+    return QPixmap.fromImage(qimg.copy())
+
+
 # ======================================================================
 # ZoomableImageView
 # ======================================================================
 
 class ZoomableImageView(QGraphicsView):
     """Pannable, zoomable image viewer widget."""
+
+    cursorMoved = pyqtSignal(float, float, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -242,17 +448,47 @@ class ZoomableImageView(QGraphicsView):
         self._scene.addItem(self._pix_item)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.setStyleSheet("background: #1a1a1a; border: none;")
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+        self._scale_bar_um_per_pixel: float | None = None
+        self.setStyleSheet(
+            "QGraphicsView {"
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+            " stop:0 #111827, stop:1 #1f2937);"
+            "border: 1px solid #334155; border-radius: 18px; }"
+        )
 
     def set_pixmap(self, pix: QPixmap) -> None:
         self._pix_item.setPixmap(pix)
         self._scene.setSceneRect(QRectF(pix.rect()))
+        self.viewport().update()
+
+    def set_scale_bar_um_per_pixel(self, value: float | None) -> None:
+        self._scale_bar_um_per_pixel = value
+        self.viewport().update()
 
     def fit_in_view(self) -> None:
+        self.resetTransform()
         if not self._pix_item.pixmap().isNull():
-            self.fitInView(self._pix_item, Qt.AspectRatioMode.KeepAspectRatio)
-        elif self._scene.sceneRect().width() > 0:
-            self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            target = self._pix_item.sceneBoundingRect()
+        else:
+            target = self._scene.itemsBoundingRect()
+            if target.isNull() or target.width() <= 0 or target.height() <= 0:
+                target = self._scene.sceneRect()
+        if target.width() > 0 and target.height() > 0:
+            self.fitInView(target, Qt.AspectRatioMode.KeepAspectRatio)
+            self.centerOn(target.center())
+
+    def actual_size(self) -> None:
+        self.resetTransform()
+        if not self._pix_item.pixmap().isNull():
+            self.centerOn(self._pix_item.sceneBoundingRect().center())
+        else:
+            target = self._scene.itemsBoundingRect()
+            if target.width() > 0 and target.height() > 0:
+                self.centerOn(target.center())
+        self.viewport().update()
 
     def wheelEvent(self, event):  # noqa: N802
         factor = 1.15
@@ -260,6 +496,82 @@ class ZoomableImageView(QGraphicsView):
             self.scale(factor, factor)
         else:
             self.scale(1 / factor, 1 / factor)
+        self.viewport().update()
+
+    def mouseMoveEvent(self, event):  # noqa: N802
+        scene_pos = self.mapToScene(event.position().toPoint())
+        self._emit_cursor(scene_pos)
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event):  # noqa: N802
+        self.cursorMoved.emit(-1.0, -1.0, False)
+        super().leaveEvent(event)
+
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        self.viewport().update()
+
+    def paintEvent(self, event):  # noqa: N802
+        super().paintEvent(event)
+        self._draw_scale_bar()
+
+    def _emit_cursor(self, scene_pos: QPointF) -> None:
+        rect = self._scene.sceneRect()
+        inside = rect.contains(scene_pos)
+        self.cursorMoved.emit(scene_pos.x(), scene_pos.y(), inside)
+
+    def _draw_scale_bar(self) -> None:
+        from omero_browser_qt import compute_scale_bar
+
+        spec = compute_scale_bar(
+            self._scale_bar_um_per_pixel,
+            self.transform().m11(),
+        )
+        if spec is None:
+            return
+
+        painter = QPainter(self.viewport())
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        margin = 18
+        bar_y = self.viewport().height() - margin
+        bar_x = margin
+        label = spec.label
+
+        text_rect = painter.fontMetrics().boundingRect(label)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(2, 6, 23, 190))
+        painter.drawRoundedRect(
+            bar_x - 8,
+            bar_y - 34,
+            int(max(spec.screen_pixels + 16, text_rect.width() + 20)),
+            38,
+            8,
+            8,
+        )
+
+        painter.setPen(QPen(QColor("#f8fafc"), 2))
+        painter.drawLine(
+            int(bar_x),
+            int(bar_y - 10),
+            int(bar_x + spec.screen_pixels),
+            int(bar_y - 10),
+        )
+        painter.drawLine(int(bar_x), int(bar_y - 14), int(bar_x), int(bar_y - 6))
+        painter.drawLine(
+            int(bar_x + spec.screen_pixels),
+            int(bar_y - 14),
+            int(bar_x + spec.screen_pixels),
+            int(bar_y - 6),
+        )
+        painter.drawText(
+            int(bar_x),
+            int(bar_y - 30),
+            max(int(spec.screen_pixels), text_rect.width() + 4),
+            16,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            label,
+        )
+        painter.end()
 
 
 # ======================================================================
@@ -303,6 +615,7 @@ class TiledImageItem(QGraphicsObject):
         self._contrast: dict[int, tuple[float, float]] = {}
         self._z = 0
         self._t = 0
+        self._mode = "Slice"
 
         # Composited overview pixmap (level 0, all channels)
         self._overview_pix: QPixmap = QPixmap()
@@ -311,6 +624,8 @@ class TiledImageItem(QGraphicsObject):
         self._max_comp_tiles = 500
 
         self._worker: _TileFetchWorker | None = None
+        self._pending_requests: set[tuple[int, int, int, int, int, int]] = set()
+        self._worker_requests: set[tuple[int, int, int, int, int, int]] = set()
 
     def boundingRect(self):
         return QRectF(0, 0, self._fw, self._fh)
@@ -318,11 +633,13 @@ class TiledImageItem(QGraphicsObject):
     def set_overview(self, pix: QPixmap):
         self._overview_pix = pix
 
-    def set_display(self, active, colors, contrast, z):
+    def set_display(self, active, colors, contrast, z, t, mode):
         self._active = active
         self._colors = colors
         self._contrast = contrast
         self._z = z
+        self._t = t
+        self._mode = mode
         self._tile_cache.clear()
         self.update()
 
@@ -370,45 +687,39 @@ class TiledImageItem(QGraphicsObject):
         tx1 = min((vx1 + tw - 1) // tw, (lw + tw - 1) // tw)
         ty1 = min((vy1 + th - 1) // th, (lh + th - 1) // th)
 
-        missing = []
+        missing: list[tuple[int, int, int, int, int, int]] = []
+        visible_tiles: set[tuple[int, int]] = set()
         for tyi in range(ty0, ty1):
             for txi in range(tx0, tx1):
-                comp_key = (level, txi, tyi)
+                visible_tiles.add((txi, tyi))
+                pix = self._get_composite_tile(level, txi, tyi)
+                ix = txi * tw / fx
+                iy = tyi * th / fy
+                iw = min(tw, lw - txi * tw) / fx
+                ih = min(th, lh - tyi * th) / fy
+                target_rect = QRectF(ix, iy, iw, ih)
 
-                if comp_key in self._tile_cache:
-                    self._tile_cache.move_to_end(comp_key)
-                    pix = self._tile_cache[comp_key]
-                else:
-                    pix = self._try_composite(level, txi, tyi)
-                    if pix is not None:
-                        while len(self._tile_cache) >= self._max_comp_tiles:
-                            self._tile_cache.popitem(last=False)
-                        self._tile_cache[comp_key] = pix
-                    else:
-                        # Queue missing channel tiles for background fetch
-                        for c in self._active:
-                            if not self._prov.has_tile(
-                                level, c, self._z, self._t, txi, tyi
-                            ):
-                                missing.append(
-                                    (level, c, self._z, self._t, txi, tyi)
-                                )
-                        continue
-
-                if pix and not pix.isNull():
-                    ix = txi * tw / fx
-                    iy = tyi * th / fy
-                    iw = pix.width() / fx
-                    ih = pix.height() / fy
+                if pix is not None and not pix.isNull():
                     painter.drawPixmap(
-                        QRectF(ix, iy, iw, ih),
+                        target_rect,
                         pix,
                         QRectF(0, 0, pix.width(), pix.height()),
                     )
+                else:
+                    fallback = self._try_fallback_composite(level, txi, tyi, target_rect)
+                    if fallback is not None:
+                        fb_pix, src_rect = fallback
+                        painter.drawPixmap(target_rect, fb_pix, src_rect)
 
+        missing.extend(
+            self._prefetch_requests_for_region(level, tx0, ty0, tx1, ty1, visible_tiles)
+        )
         if missing and (self._worker is None or not self._worker.isRunning()):
-            self._worker = _TileFetchWorker(self._prov, missing)
-            self._worker.done.connect(self.update)
+            batch = missing[:96]
+            self._worker_requests = set(batch)
+            self._pending_requests.update(self._worker_requests)
+            self._worker = _TileFetchWorker(self._prov, batch)
+            self._worker.done.connect(self._on_worker_done)
             self._worker.start()
 
     def _try_composite(self, level, tx, ty):
@@ -425,10 +736,16 @@ class TiledImageItem(QGraphicsObject):
 
         tiles = []
         for c in self._active:
-            arr = self._prov.get_cached_tile(level, c, self._z, self._t, tx, ty)
-            if arr is None:
-                return None  # Not all channels cached yet
-            tiles.append((arr, c))
+            planes = []
+            for z in self._z_indices():
+                arr = self._prov.get_cached_tile(level, c, z, self._t, tx, ty)
+                if arr is None:
+                    return None  # Not all required tiles cached yet
+                planes.append(arr)
+            if not planes:
+                continue
+            projected = _project_stack(np.stack(planes, axis=0), self._mode, self._z)
+            tiles.append((projected, c))
 
         canvas = np.zeros((ah, aw, 3), dtype=np.float64)
         for arr, c in tiles:
@@ -448,6 +765,188 @@ class TiledImageItem(QGraphicsObject):
         qimg = QImage(rgb.data, aw, ah, 3 * aw, QImage.Format.Format_RGB888)
         return QPixmap.fromImage(qimg.copy())
 
+    def _get_composite_tile(self, level, tx, ty):
+        comp_key = (level, tx, ty)
+        if comp_key in self._tile_cache:
+            self._tile_cache.move_to_end(comp_key)
+            return self._tile_cache[comp_key]
+        pix = self._try_composite(level, tx, ty)
+        if pix is not None:
+            while len(self._tile_cache) >= self._max_comp_tiles:
+                self._tile_cache.popitem(last=False)
+            self._tile_cache[comp_key] = pix
+        return pix
+
+    def _try_fallback_composite(self, level, tx, ty, target_rect: QRectF):
+        """Use a cached coarser tile as an interim preview for a missing sharper tile."""
+        target_full = self._tile_full_res_rect(level, tx, ty)
+        for fallback_level in range(level - 1, 0, -1):
+            rect = self._level_rect_for_full_res_rect(fallback_level, target_full)
+            ftx0, fty0, ftx1, fty1 = self._tile_index_bounds_for_level_rect(fallback_level, rect)
+            if ftx1 - ftx0 != 1 or fty1 - fty0 != 1:
+                continue
+            fb_pix = self._get_composite_tile(fallback_level, ftx0, fty0)
+            if fb_pix is None or fb_pix.isNull():
+                continue
+            tile_rect = self._tile_level_rect(fallback_level, ftx0, fty0)
+            sx = fb_pix.width() / tile_rect.width()
+            sy = fb_pix.height() / tile_rect.height()
+            src = QRectF(
+                (rect.left() - tile_rect.left()) * sx,
+                (rect.top() - tile_rect.top()) * sy,
+                rect.width() * sx,
+                rect.height() * sy,
+            )
+            if src.width() > 0 and src.height() > 0:
+                return fb_pix, src
+        return None
+
+    def _z_indices(self) -> list[int]:
+        if self._mode == "Slice":
+            return [self._z]
+        return list(range(int(self._prov.metadata.get("size_z", 1))))
+
+    def _prefetch_requests_for_region(
+        self,
+        level: int,
+        tx0: int,
+        ty0: int,
+        tx1: int,
+        ty1: int,
+        visible_tiles: set[tuple[int, int]],
+    ) -> list[tuple[int, int, int, int, int, int]]:
+        lw, lh = self._prov.level_size(level)
+        tw, th = self._prov.tile_size(level)
+        max_tx = max((lw + tw - 1) // tw, 1)
+        max_ty = max((lh + th - 1) // th, 1)
+        pad = 1
+        qx0 = max(0, tx0 - pad)
+        qy0 = max(0, ty0 - pad)
+        qx1 = min(max_tx, tx1 + pad)
+        qy1 = min(max_ty, ty1 + pad)
+        cx = (tx0 + tx1 - 1) / 2.0
+        cy = (ty0 + ty1 - 1) / 2.0
+
+        target_tiles: list[tuple[int, int]] = []
+        ring_tiles: list[tuple[int, int]] = []
+        for tyi in range(qy0, qy1):
+            for txi in range(qx0, qx1):
+                if (txi, tyi) in visible_tiles:
+                    continue
+                ring_tiles.append((txi, tyi))
+        target_tiles.extend(
+            sorted(
+                visible_tiles,
+                key=lambda tile: (abs(tile[1] - cy) + abs(tile[0] - cx), tile[1], tile[0]),
+            )
+        )
+        target_tiles.extend(
+            sorted(
+                ring_tiles,
+                key=lambda tile: (abs(tile[1] - cy) + abs(tile[0] - cx), tile[1], tile[0]),
+            )
+        )
+
+        tiles_by_level: list[tuple[int, list[tuple[int, int]]]] = []
+        coarse_level = max(1, level - 1)
+        if coarse_level != level:
+            coarse_tiles = self._map_tiles_to_level(coarse_level, visible_tiles, level)
+            coarse_cx = sum(tile[0] for tile in coarse_tiles) / max(len(coarse_tiles), 1)
+            coarse_cy = sum(tile[1] for tile in coarse_tiles) / max(len(coarse_tiles), 1)
+            tiles_by_level.append(
+                (
+                    coarse_level,
+                    sorted(
+                        coarse_tiles,
+                        key=lambda tile: (
+                            abs(tile[1] - coarse_cy) + abs(tile[0] - coarse_cx),
+                            tile[1],
+                            tile[0],
+                        ),
+                    ),
+                )
+            )
+        tiles_by_level.append((level, target_tiles))
+
+        requests: list[tuple[int, int, int, int, int, int]] = []
+        seen: set[tuple[int, int, int, int, int, int]] = set()
+        z_indices = self._z_indices()
+        for req_level, tiles in tiles_by_level:
+            for txi, tyi in tiles:
+                for c in self._active:
+                    for z in z_indices:
+                        req = (req_level, c, z, self._t, txi, tyi)
+                        if (
+                            req in seen
+                            or req in self._pending_requests
+                            or self._prov.has_tile(req_level, c, z, self._t, txi, tyi)
+                        ):
+                            continue
+                        seen.add(req)
+                        requests.append(req)
+        return requests
+
+    def _tile_full_res_rect(self, level: int, tx: int, ty: int) -> QRectF:
+        lw, lh = self._prov.level_size(level)
+        tw, th = self._prov.tile_size(level)
+        fx, fy = lw / self._fw, lh / self._fh
+        x0 = tx * tw / fx
+        y0 = ty * th / fy
+        w = min(tw, lw - tx * tw) / fx
+        h = min(th, lh - ty * th) / fy
+        return QRectF(x0, y0, w, h)
+
+    def _level_rect_for_full_res_rect(self, level: int, full_rect: QRectF) -> QRectF:
+        lw, lh = self._prov.level_size(level)
+        fx, fy = lw / self._fw, lh / self._fh
+        return QRectF(
+            full_rect.left() * fx,
+            full_rect.top() * fy,
+            full_rect.width() * fx,
+            full_rect.height() * fy,
+        )
+
+    def _tile_level_rect(self, level: int, tx: int, ty: int) -> QRectF:
+        lw, lh = self._prov.level_size(level)
+        tw, th = self._prov.tile_size(level)
+        x0 = tx * tw
+        y0 = ty * th
+        return QRectF(x0, y0, min(tw, lw - x0), min(th, lh - y0))
+
+    def _tile_index_bounds_for_level_rect(self, level: int, rect: QRectF) -> tuple[int, int, int, int]:
+        lw, lh = self._prov.level_size(level)
+        tw, th = self._prov.tile_size(level)
+        rx0 = max(0, int(rect.left()))
+        ry0 = max(0, int(rect.top()))
+        rx1 = min(lw, int(math.ceil(rect.right())))
+        ry1 = min(lh, int(math.ceil(rect.bottom())))
+        tx0 = rx0 // tw
+        ty0 = ry0 // th
+        tx1 = min((rx1 + tw - 1) // tw, (lw + tw - 1) // tw)
+        ty1 = min((ry1 + th - 1) // th, (lh + th - 1) // th)
+        return tx0, ty0, tx1, ty1
+
+    def _map_tiles_to_level(
+        self,
+        target_level: int,
+        source_tiles: set[tuple[int, int]],
+        source_level: int,
+    ) -> set[tuple[int, int]]:
+        mapped: set[tuple[int, int]] = set()
+        for tx, ty in source_tiles:
+            full_rect = self._tile_full_res_rect(source_level, tx, ty)
+            level_rect = self._level_rect_for_full_res_rect(target_level, full_rect)
+            tx0, ty0, tx1, ty1 = self._tile_index_bounds_for_level_rect(target_level, level_rect)
+            for mty in range(ty0, ty1):
+                for mtx in range(tx0, tx1):
+                    mapped.add((mtx, mty))
+        return mapped
+
+    def _on_worker_done(self) -> None:
+        self._pending_requests.difference_update(self._worker_requests)
+        self._worker_requests.clear()
+        self.update()
+
 
 # ======================================================================
 # Main window
@@ -456,21 +955,27 @@ class TiledImageItem(QGraphicsObject):
 class ViewerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("OMERO Viewer Demo")
+        self.setWindowTitle("OMERO Viewer")
         self.setWindowIcon(_make_app_icon())
         self.resize(1000, 700)
 
         # State
-        self._volumes: list[np.ndarray] = []  # per-channel (Z, Y, X)
+        self._volumes: list[np.ndarray] = []  # optional eager-loaded channel volumes
         self._metadata: dict[str, Any] = {}
         self._channel_colors: list[tuple[int, int, int]] = []
         self._channel_buttons: list[QPushButton] = []
         self._pct_cache: dict = {}
+        self._overview_cache: dict[tuple[int, int], list[np.ndarray]] = {}
+        self._regular_provider = None
+        self._selection_context = None
+        self._view_request_id = 0
+        self._rendering = False
+        self._pending_render = False
+        self._web_backend = None
 
         # Tiled pyramid mode
         self._tiled_item: TiledImageItem | None = None
         self._tile_provider = None
-        self._overview_volumes: list[np.ndarray] = []
 
         self._build_ui()
 
@@ -479,176 +984,704 @@ class ViewerWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
-        # Toolbar
-        tb = QToolBar("Main")
-        tb.setMovable(False)
-        self.addToolBar(tb)
-
-        open_omero_act = QAction("Open from OMERO…", self)
-        open_omero_act.triggered.connect(self._open_omero)
-        tb.addAction(open_omero_act)
-
         # Central widget
         central = QWidget()
         self.setCentralWidget(central)
         main_lay = QVBoxLayout(central)
-        main_lay.setContentsMargins(4, 4, 4, 4)
+        main_lay.setContentsMargins(18, 18, 18, 12)
+        main_lay.setSpacing(14)
+        self.setStyleSheet(
+            "QMainWindow { background: #0f172a; }"
+            "QFrame#panel {"
+            "background: transparent;"
+            "border: none; border-radius: 0; }"
+            "QLabel#title { color: #e2e8f0; font-size: 22px; font-weight: 700; }"
+            "QLabel#section { color: #cbd5e1; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }"
+            "QLabel#value { color: #e2e8f0; font-size: 12px; font-weight: 600; }"
+            "QLabel#hint { color: #94a3b8; font-size: 12px; }"
+            "QPushButton {"
+            "background: #1e293b; color: #e2e8f0; border: 1px solid #334155;"
+            "border-radius: 6px; padding: 6px 10px; font-weight: 600; }"
+            "QPushButton:hover { background: #273449; border-color: #475569; }"
+            "QPushButton:pressed { background: #0f172a; }"
+            "QPushButton#primary { background: #0ea5e9; color: #082f49; border-color: #38bdf8; }"
+            "QPushButton#primary:hover { background: #38bdf8; }"
+            "QPushButton#spin_step { min-width: 18px; max-width: 18px; min-height: 12px; max-height: 12px; padding: 0; border-radius: 3px; font-size: 8px; }"
+            "QComboBox, QDoubleSpinBox {"
+            "background: #0f172a; color: #e2e8f0; border: 1px solid #334155;"
+            "border-radius: 6px; padding: 4px 8px; min-height: 18px; }"
+            "QSlider::groove:horizontal { background: #1e293b; height: 6px; border-radius: 3px; }"
+            "QSlider::sub-page:horizontal { background: #38bdf8; border-radius: 3px; }"
+            "QSlider::handle:horizontal {"
+            "background: #f8fafc; width: 16px; margin: -6px 0; border-radius: 8px; }"
+            "QSlider::groove:vertical { background: #1e293b; width: 6px; border-radius: 3px; }"
+            "QSlider::sub-page:vertical { background: #38bdf8; border-radius: 3px; }"
+            "QSlider::handle:vertical {"
+            "background: #f8fafc; height: 16px; margin: 0 -6px; border-radius: 8px; }"
+            "QStatusBar { background: #0b1220; color: #94a3b8; }"
+        )
 
-        # --- Controls row ---
-        ctrl = QHBoxLayout()
+        top_panel = self._make_panel()
+        top_lay = QVBoxLayout(top_panel)
+        top_lay.setContentsMargins(0, 0, 0, 0)
+        top_lay.setSpacing(6)
 
-        # Projection
-        ctrl.addWidget(QLabel("Projection:"))
-        self._proj_combo = QComboBox()
-        self._proj_combo.addItems(["Slice", "MIP", "SUM"])
-        self._proj_combo.currentIndexChanged.connect(self._update_viewer)
-        ctrl.addWidget(self._proj_combo)
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        title_box = QVBoxLayout()
+        title_box.setSpacing(2)
+        title = QLabel("OMERO Viewer")
+        title.setObjectName("title")
+        self._path_label = QLabel("")
+        self._path_label.setObjectName("hint")
+        self._path_label.setWordWrap(True)
+        title_box.addWidget(title)
+        title_box.addWidget(self._path_label)
+        title_row.addLayout(title_box, 1)
 
-        # Z slider
-        ctrl.addWidget(QLabel("Z:"))
-        self._z_slider = QSlider(Qt.Orientation.Horizontal)
-        self._z_slider.setMinimum(0)
-        self._z_slider.setMaximum(0)
-        self._z_slider.valueChanged.connect(self._update_viewer)
-        self._z_slider.setMinimumWidth(120)
-        ctrl.addWidget(self._z_slider)
-        self._z_label = QLabel("0/0")
-        ctrl.addWidget(self._z_label)
-
-        # Lo% / Hi%
-        ctrl.addWidget(QLabel("Lo%:"))
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        self._backend_label = QLabel("")
+        self._backend_label.setObjectName("hint")
+        actions.addWidget(self._backend_label)
+        actions.addWidget(QLabel("Lo"))
         self._lo_spin = QDoubleSpinBox()
         self._lo_spin.setRange(0.0, 50.0)
         self._lo_spin.setValue(0.1)
-        self._lo_spin.setSingleStep(0.1)
-        self._lo_spin.setDecimals(2)
+        self._lo_spin.setSingleStep(0.001)
+        self._lo_spin.setDecimals(3)
+        self._lo_spin.setFixedWidth(72)
+        self._lo_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self._lo_spin.valueChanged.connect(self._on_contrast_changed)
-        ctrl.addWidget(self._lo_spin)
-
-        ctrl.addWidget(QLabel("Hi%:"))
+        actions.addWidget(self._spin_with_buttons(self._lo_spin))
+        actions.addWidget(QLabel("Hi"))
         self._hi_spin = QDoubleSpinBox()
         self._hi_spin.setRange(50.0, 100.0)
         self._hi_spin.setValue(100.0)
-        self._hi_spin.setSingleStep(0.5)
-        self._hi_spin.setDecimals(2)
+        self._hi_spin.setSingleStep(0.001)
+        self._hi_spin.setDecimals(3)
+        self._hi_spin.setFixedWidth(72)
+        self._hi_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self._hi_spin.valueChanged.connect(self._on_contrast_changed)
-        ctrl.addWidget(self._hi_spin)
+        actions.addWidget(self._spin_with_buttons(self._hi_spin))
+        self._actual_btn = QPushButton("100%")
+        self._fit_btn = QPushButton("Fit to View")
+        self._open_btn = QPushButton("Open from OMERO")
+        self._open_btn.setObjectName("primary")
+        self._open_btn.clicked.connect(self._open_omero)
+        actions.addWidget(self._actual_btn)
+        actions.addWidget(self._fit_btn)
+        self._3d_btn = QPushButton("3D")
+        self._3d_btn.setEnabled(False)
+        self._3d_btn.setToolTip("Open 3D volume viewer (requires vispy)")
+        self._3d_btn.clicked.connect(self._open_3d_viewer)
+        if not _HAS_VISPY:
+            self._3d_btn.setToolTip("vispy not installed — pip install vispy")
+        actions.addWidget(self._3d_btn)
+        actions.addWidget(self._open_btn)
+        title_row.addLayout(actions)
+        top_lay.addLayout(title_row)
 
-        ctrl.addStretch()
-        main_lay.addLayout(ctrl)
-
-        # --- Channel toggles row ---
         self._ch_row = QHBoxLayout()
-        self._ch_row.addWidget(QLabel("Channels:"))
+        self._ch_row.setSpacing(8)
         self._ch_row.addStretch()
-        main_lay.addLayout(self._ch_row)
+        top_lay.addLayout(self._ch_row)
 
-        # --- Image viewer ---
+        body_row = QHBoxLayout()
+        body_row.setSpacing(12)
+
+        viewer_panel = self._make_panel()
+        viewer_lay = QVBoxLayout(viewer_panel)
+        viewer_lay.setContentsMargins(12, 12, 12, 12)
+        viewer_lay.setSpacing(10)
+
         self._viewer = ZoomableImageView()
-        main_lay.addWidget(self._viewer, 1)
+        self._viewer.cursorMoved.connect(self._update_cursor_readout)
+
+        # Stacked widget: index 0 = 2D viewer, index 1 = 3D vispy canvas
+        self._view_stack = QStackedWidget()
+        self._view_stack.addWidget(self._viewer)  # index 0
+        if _HAS_VISPY:
+            self._vispy_canvas = vispy_scene.SceneCanvas(
+                keys="interactive", show=False, bgcolor="#1e1e1e",
+            )
+            self._vispy_view = self._vispy_canvas.central_widget.add_view()
+            self._vispy_view.camera = vispy_scene.TurntableCamera(
+                fov=60, elevation=30, azimuth=45, distance=0,
+            )
+            self._view_stack.addWidget(self._vispy_canvas.native)  # index 1
+        self._vispy_volumes: list = []
+        self._vol_raw_stacks: list = []  # cached (stack, color, ch_idx) for contrast refresh
+        self._3d_debounce = QTimer(self)
+        self._3d_debounce.setSingleShot(True)
+        self._3d_debounce.setInterval(3000)
+        self._3d_debounce.timeout.connect(self._debounced_3d_refresh)
+        self._view_stack.setCurrentIndex(0)
+        viewer_lay.addWidget(self._view_stack, 1)
+
+        # 3D toolbar (hidden until 3D mode is active)
+        self._3d_bar = QWidget()
+        bar3_lay = QHBoxLayout(self._3d_bar)
+        bar3_lay.setContentsMargins(0, 0, 0, 0)
+        bar3_lay.setSpacing(8)
+        bar3_lay.addWidget(QLabel("Render:"))
+        self._vol_method_combo = QComboBox()
+        self._vol_method_combo.addItems(["MIP", "Translucent", "Isosurface", "Additive"])
+        self._vol_method_combo.currentIndexChanged.connect(self._on_vol_method_changed)
+        bar3_lay.addWidget(self._vol_method_combo)
+        self._vol_slider_label = QLabel("Gain:")
+        bar3_lay.addWidget(self._vol_slider_label)
+        self._vol_thresh_slider = QSlider(Qt.Orientation.Horizontal)
+        self._vol_thresh_slider.setRange(1, 200)
+        self._vol_thresh_slider.setValue(28)
+        self._vol_thresh_slider.setFixedWidth(140)
+        self._vol_thresh_slider.valueChanged.connect(self._on_vol_threshold_changed)
+        bar3_lay.addWidget(self._vol_thresh_slider)
+        self._vol_slider_val = QLabel("0.28")
+        self._vol_slider_val.setFixedWidth(32)
+        bar3_lay.addWidget(self._vol_slider_val)
+        bar3_lay.addWidget(QLabel("Downsample:"))
+        self._vol_ds_combo = QComboBox()
+        self._vol_ds_combo.addItems(["1x", "2x", "4x"])
+        self._vol_ds_combo.currentIndexChanged.connect(self._on_vol_downsample_changed)
+        bar3_lay.addWidget(self._vol_ds_combo)
+        self._vol_reset_btn = QPushButton("Reset View")
+        self._vol_reset_btn.clicked.connect(self._reset_vol_camera)
+        bar3_lay.addWidget(self._vol_reset_btn)
+        bar3_lay.addStretch()
+        self._3d_bar.setVisible(False)
+        viewer_lay.addWidget(self._3d_bar)
+
+        body_row.addWidget(viewer_panel, 1)
+
+        z_panel = self._make_panel()
+        z_panel.setFixedWidth(64)
+        z_lay = QVBoxLayout(z_panel)
+        z_lay.setContentsMargins(0, 0, 0, 0)
+        z_lay.setSpacing(4)
+        z_lbl = QLabel("Z")
+        z_lbl.setObjectName("hint")
+        z_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        z_lay.addWidget(z_lbl)
+        self._z_slider = QSlider(Qt.Orientation.Vertical)
+        self._z_slider.setMinimum(0)
+        self._z_slider.setMaximum(0)
+        self._z_slider.valueChanged.connect(self._request_view_update)
+        self._z_slider.setFixedWidth(22)
+        z_lay.addWidget(self._z_slider, 1, Qt.AlignmentFlag.AlignHCenter)
+        self._z_label = QLabel("0/0")
+        self._z_label.setObjectName("hint")
+        self._z_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._z_label.setFixedWidth(64)
+        z_lay.addWidget(self._z_label, 0, Qt.AlignmentFlag.AlignHCenter)
+        body_row.addWidget(z_panel, 0)
+
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(8)
+        time_panel = self._make_panel()
+        time_lay = QHBoxLayout(time_panel)
+        time_lay.setContentsMargins(0, 0, 0, 0)
+        time_lay.setSpacing(8)
+        t_lbl = QLabel("T")
+        t_lbl.setObjectName("hint")
+        time_lay.addWidget(t_lbl)
+        self._play_btn = QPushButton("▶")
+        self._play_btn.setFixedSize(32, 24)
+        self._play_btn.setStyleSheet("font-size: 21px;")
+        self._play_btn.setCheckable(True)
+        self._play_btn.toggled.connect(self._on_play_toggled)
+        time_lay.addWidget(self._play_btn)
+        self._speed_combo = QComboBox()
+        self._speed_combo.addItems(["1x", "2x", "3x", "fast"])
+        self._speed_combo.setFixedWidth(52)
+        self._speed_combo.currentIndexChanged.connect(self._on_speed_changed)
+        time_lay.addWidget(self._speed_combo)
+        self._play_timer = QTimer(self)
+        self._play_timer.setInterval(1000)
+        self._play_timer.timeout.connect(self._on_play_tick)
+        self._t_slider = QSlider(Qt.Orientation.Horizontal)
+        self._t_slider.setMinimum(0)
+        self._t_slider.setMaximum(0)
+        self._t_slider.valueChanged.connect(self._request_view_update)
+        time_lay.addWidget(self._t_slider, 1)
+        self._t_label = QLabel("0/0")
+        self._t_label.setObjectName("hint")
+        time_lay.addWidget(self._t_label)
+        bottom_row.addWidget(time_panel, 1)
+
+        projection_panel = self._make_panel()
+        projection_panel.setFixedWidth(150)
+        projection_lay = QVBoxLayout(projection_panel)
+        projection_lay.setContentsMargins(0, 0, 0, 0)
+        projection_lay.setSpacing(0)
+        self._proj_combo = QComboBox()
+        self._proj_combo.addItems(_PROJECTION_MODES)
+        self._proj_combo.currentIndexChanged.connect(self._request_view_update)
+        projection_lay.addWidget(self._proj_combo)
+        bottom_row.addWidget(projection_panel, 0)
+
+        main_lay.addWidget(top_panel)
+        main_lay.addLayout(body_row, 1)
+        main_lay.addLayout(bottom_row)
+        self._actual_btn.clicked.connect(self._viewer.actual_size)
+        self._fit_btn.clicked.connect(self._viewer.fit_in_view)
 
         # Status bar
         self._status = QStatusBar()
         self.setStatusBar(self._status)
+        self._cursor_label = QLabel("")
+        self._cursor_label.setObjectName("hint")
+        self._status.addPermanentWidget(self._cursor_label)
+        self._progress = QProgressBar()
+        self._progress.setFixedWidth(220)
+        self._progress.setFixedHeight(14)
+        self._progress.setTextVisible(True)
+        self._progress.hide()
+        self._status.addPermanentWidget(self._progress)
+
+    def _make_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("panel")
+        return panel
+
+    def _section_label(self, text: str) -> QLabel:
+        lbl = QLabel(text.upper())
+        lbl.setObjectName("section")
+        return lbl
+
+    def _spin_with_buttons(self, spin: QDoubleSpinBox) -> QWidget:
+        wrapper = QWidget()
+        lay = QHBoxLayout(wrapper)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
+        lay.addWidget(spin)
+
+        buttons = QVBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, 0)
+        buttons.setSpacing(2)
+
+        up_btn = QPushButton("▲")
+        up_btn.setObjectName("spin_step")
+        up_btn.setAutoRepeat(True)
+        up_btn.clicked.connect(spin.stepUp)
+        buttons.addWidget(up_btn)
+
+        down_btn = QPushButton("▼")
+        down_btn.setObjectName("spin_step")
+        down_btn.setAutoRepeat(True)
+        down_btn.clicked.connect(spin.stepDown)
+        buttons.addWidget(down_btn)
+
+        lay.addLayout(buttons)
+        return wrapper
+
+    def _begin_progress(self, total: int, text: str) -> None:
+        self._progress.setRange(0, max(total, 1))
+        self._progress.setValue(0)
+        self._progress.setFormat("%v / %m")
+        self._progress.show()
+        self._status.showMessage(text)
+        QApplication.processEvents()
+
+    def _advance_progress(self, value: int, text: str | None = None) -> None:
+        self._progress.setValue(value)
+        if text is not None:
+            self._status.showMessage(text)
+        QApplication.processEvents()
+
+    def _end_progress(self) -> None:
+        self._progress.hide()
+        self._refresh_metadata_labels()
+
+    def _on_backend_choice_changed(self, *_args) -> None:
+        pass
+
+    def _on_play_toggled(self, checked: bool) -> None:
+        if checked:
+            if self._t_slider.maximum() < 1:
+                self._play_btn.setChecked(False)
+                return
+            self._play_btn.setText("⏸")
+            self._play_btn.setStyleSheet("font-size: 21px;")
+            self._apply_play_speed()
+            self._play_timer.start()
+        else:
+            self._play_btn.setText("▶")
+            self._play_btn.setStyleSheet("font-size: 21px;")
+            self._play_timer.stop()
+
+    def _on_speed_changed(self, _index: int) -> None:
+        if self._play_btn.isChecked():
+            self._apply_play_speed()
+
+    def _apply_play_speed(self) -> None:
+        speed = self._speed_combo.currentText()
+        intervals = {"1x": 1000, "2x": 500, "3x": 333, "fast": 0}
+        self._play_timer.setInterval(intervals.get(speed, 1000))
+
+    def _on_play_tick(self) -> None:
+        t = self._t_slider.value()
+        t_max = self._t_slider.maximum()
+        if t >= t_max:
+            self._t_slider.setValue(0)
+        else:
+            self._t_slider.setValue(t + 1)
+
+    def _request_view_update(self, *_args) -> None:
+        self._view_request_id += 1
+        if self._rendering:
+            self._pending_render = True
+            return
+        self._update_viewer(self._view_request_id)
+
+    def _ensure_render_current(self, request_id: int) -> None:
+        if request_id != self._view_request_id:
+            raise _RenderCancelled
+
+    def _update_cursor_readout(self, x: float, y: float, inside: bool) -> None:
+        if not inside or not self._metadata:
+            self._cursor_label.setText("")
+            return
+        sx = max(int(self._metadata.get("size_x", 0)), 0)
+        sy = max(int(self._metadata.get("size_y", 0)), 0)
+        xi = max(0, min(int(x), max(sx - 1, 0)))
+        yi = max(0, min(int(y), max(sy - 1, 0)))
+        self._cursor_label.setText(
+            f"X {xi}  Y {yi}  Z {self._current_z()}  T {self._current_t()}"
+        )
+
+    def _fit_after_load(self) -> None:
+        """Reset zoom and fit newly loaded content after layout settles."""
+        QTimer.singleShot(0, self._viewer.fit_in_view)
 
     # ------------------------------------------------------------------
     # Open from OMERO
     # ------------------------------------------------------------------
 
-    def _open_omero(self):
-        from omero_browser_qt import (
-            LoginDialog,
-            OmeroBrowserDialog,
-            OmeroGateway,
-            is_large_image,
-            load_image_data,
-            load_image_lazy,
-        )
-
-        gw = OmeroGateway()
-
-        # Login if not connected
-        if not gw.is_connected():
-            dlg = LoginDialog(self, gateway=gw)
-            if dlg.exec() != LoginDialog.DialogCode.Accepted:
-                return
-
-        # Browse
-        browser = OmeroBrowserDialog(self, gateway=gw)
-        if browser.exec() != OmeroBrowserDialog.DialogCode.Accepted:
+    def _open_3d_viewer(self) -> None:
+        """Toggle between 2D and 3D view in the same viewer panel."""
+        if not _HAS_VISPY:
+            QMessageBox.warning(self, "vispy not installed",
+                                "Install vispy to use the 3D viewer:\n  pip install vispy")
             return
 
-        images = browser.get_selected_images()
-        if not images:
+        # If already in 3D mode, switch back to 2D
+        if self._view_stack.currentIndex() == 1:
+            self._switch_to_2d()
             return
 
-        image = images[0]  # Load the first selected image
-        self._status.showMessage(f"Loading {image.getName()} from OMERO…")
+        channels = self._current_channel_render_settings()
+        active = [(i, ch) for i, ch in enumerate(channels) if ch.get("active", True)]
+        if not active:
+            self._status.showMessage("No active channels for 3D view")
+            return
+
+        nz = max(int(self._metadata.get("size_z", 1)), 1)
+        if nz < 2:
+            self._status.showMessage("Need at least 2 Z-planes for 3D view")
+            return
+
+        self._status.showMessage("Loading channel stacks for 3D viewer…")
         QApplication.processEvents()
 
         try:
-            if is_large_image(image):
+            self._load_3d_volumes(active, nz)
+        except Exception as exc:  # noqa: BLE001
+            self._status.clearMessage()
+            QMessageBox.critical(self, "Error", f"Failed to load 3D data:\n{exc}")
+            return
+
+        self._view_stack.setCurrentIndex(1)
+        self._3d_bar.setVisible(True)
+        self._3d_btn.setText("2D")
+        self._status.showMessage("3D volume view — drag to rotate, scroll to zoom")
+
+    def _switch_to_2d(self) -> None:
+        self._view_stack.setCurrentIndex(0)
+        self._3d_bar.setVisible(False)
+        self._3d_btn.setText("3D")
+        self._status.showMessage("2D view")
+
+    def _load_3d_volumes(self, active: list, nz: int) -> None:
+        """Build vispy Volume visuals from active channel stacks."""
+        for v in self._vispy_volumes:
+            v.parent = None
+        self._vispy_volumes.clear()
+        self._vol_raw_stacks.clear()
+
+        ds = [1, 2, 4][self._vol_ds_combo.currentIndex()]
+        px = self._metadata.get("pixel_size_x")
+        pz = self._metadata.get("pixel_size_z")
+        z_scale = (pz / px) if (pz and px and px > 0) else 1.0
+
+        method = ["mip", "translucent", "iso", "additive"][self._vol_method_combo.currentIndex()]
+        slider_val = self._vol_thresh_slider.value() / 100.0
+        threshold = slider_val if method == "iso" else 0.0
+        gain = slider_val if method != "iso" else 1.0
+
+        total_planes = nz * len(active)
+        self._begin_progress(total_planes, "Loading 3D volumes\u2026")
+        planes_loaded = 0
+
+        for ci, ch in active:
+            offset = planes_loaded
+
+            def _prog(done, total, _off=offset, _ci=ci):
+                self._advance_progress(
+                    _off + done,
+                    f"Loading 3D volumes\u2026 channel {_ci} \u2014 plane {done}/{total}",
+                )
+
+            stack = self._regular_channel_stack(ci, progress=_prog)
+            planes_loaded += nz
+
+            if ds > 1:
+                stack = stack[::ds, ::ds, ::ds]
+            color = self._channel_colors[ci] if ci < len(self._channel_colors) else (255, 255, 255)
+
+            self._vol_raw_stacks.append((stack, color, ci))
+
+            mid_z = min(nz // 2, stack.shape[0] - 1)
+            lo, hi = self._get_contrast(stack[mid_z], ci)
+
+            fvol = stack.astype(np.float32)
+            denom = hi - lo if hi > lo else 1.0
+            fvol = (fvol - lo) / denom
+            np.clip(fvol, 0.0, 1.0, out=fvol)
+            if method == "translucent":
+                np.power(fvol, 0.5, out=fvol)  # gamma boost for translucent
+            fvol *= gain
+            np.clip(fvol, 0.0, 1.0, out=fvol)
+
+            cmap = _ChannelColormap(color)
+            v = vispy_scene.visuals.Volume(
+                fvol,
+                parent=self._vispy_view.scene,
+                method=method,
+                threshold=threshold,
+                cmap=cmap,
+            )
+            v.transform = STTransform(scale=(1, 1, z_scale * ds))
+            v.set_gl_state('additive', depth_test=False)
+            self._vispy_volumes.append(v)
+
+        self._end_progress()
+        self._vispy_view.camera.set_range()
+
+    def _refresh_3d_contrast(self) -> None:
+        """Re-normalize cached 3D volumes using current Lo/Hi contrast + gain."""
+        if not self._vol_raw_stacks or not self._vispy_volumes:
+            return
+        method = ["mip", "translucent", "iso", "additive"][self._vol_method_combo.currentIndex()]
+        gain = self._vol_thresh_slider.value() / 100.0 if method != "iso" else 1.0
+        for (stack, color, ci), vol in zip(self._vol_raw_stacks, self._vispy_volumes):
+            mid_z = min(stack.shape[0] // 2, stack.shape[0] - 1)
+            lo, hi = self._get_contrast(stack[mid_z], ci)
+            fvol = stack.astype(np.float32)
+            denom = hi - lo if hi > lo else 1.0
+            fvol = (fvol - lo) / denom
+            np.clip(fvol, 0.0, 1.0, out=fvol)
+            if method == "translucent":
+                np.power(fvol, 0.5, out=fvol)  # gamma boost for translucent
+            fvol *= gain
+            np.clip(fvol, 0.0, 1.0, out=fvol)
+            vol.set_data(fvol)
+        if hasattr(self, "_vispy_canvas"):
+            self._vispy_canvas.update()
+
+    def _on_vol_method_changed(self, idx: int) -> None:
+        method = ["mip", "translucent", "iso", "additive"][idx]
+        for v in self._vispy_volumes:
+            v.method = method
+        # Adapt slider role per render mode
+        if method == "iso":
+            self._vol_slider_label.setText("Threshold:")
+            self._vol_thresh_slider.setRange(0, 100)
+            self._vol_thresh_slider.setValue(22)
+            self._vol_slider_val.setText("0.22")
+        elif method == "additive":
+            self._vol_slider_label.setText("Gain:")
+            self._vol_thresh_slider.setRange(1, 200)
+            self._vol_thresh_slider.setValue(28)
+            self._vol_slider_val.setText("0.28")
+        elif method == "translucent":
+            self._vol_slider_label.setText("Gain:")
+            self._vol_thresh_slider.setRange(1, 500)
+            self._vol_thresh_slider.setValue(200)
+            self._vol_slider_val.setText("2.00")
+        else:  # mip
+            self._vol_slider_label.setText("Gain:")
+            self._vol_thresh_slider.setRange(1, 200)
+            self._vol_thresh_slider.setValue(100)
+            self._vol_slider_val.setText("1.00")
+        self._3d_debounce.start()
+
+    def _on_vol_threshold_changed(self, value: int) -> None:
+        self._vol_slider_val.setText(f"{value / 100:.2f}")
+        self._3d_debounce.start()  # restart 3-second wait
+
+    def _debounced_3d_refresh(self) -> None:
+        """Called after 3 s of no Lo/Hi/threshold/gain changes."""
+        if self._view_stack.currentIndex() != 1:
+            return
+        method = ["mip", "translucent", "iso", "additive"][self._vol_method_combo.currentIndex()]
+        slider_val = self._vol_thresh_slider.value() / 100.0
+        if method == "iso":
+            for v in self._vispy_volumes:
+                v.threshold = slider_val
+        # Re-normalize contrast (applies gain for non-iso modes)
+        self._refresh_3d_contrast()
+
+    def _on_vol_downsample_changed(self, _idx: int) -> None:
+        if self._view_stack.currentIndex() != 1:
+            return
+        channels = self._current_channel_render_settings()
+        active = [(i, ch) for i, ch in enumerate(channels) if ch.get("active", True)]
+        nz = max(int(self._metadata.get("size_z", 1)), 1)
+        if active and nz >= 2:
+            self._load_3d_volumes(active, nz)
+
+    def _reset_vol_camera(self) -> None:
+        if hasattr(self, "_vispy_view"):
+            self._vispy_view.camera.set_range()
+            self._vispy_canvas.update()
+
+    def _open_omero(self):
+        from omero_browser_qt import (
+            OmeroBrowserDialog,
+            OmeroGateway,
+            RegularImagePlaneProvider,
+            VIEW_BACKEND_WEB,
+            WebRenderedImageBackend,
+            is_large_image,
+        )
+
+        contexts = OmeroBrowserDialog.select_image_contexts(self)
+        if not contexts:
+            return
+
+        context = contexts[0]
+        image = context.image
+        backend_choice = context.backend
+        self._status.showMessage(f"Loading {image.getName()} from OMERO ({backend_choice})…")
+        QApplication.processEvents()
+
+        try:
+            if backend_choice == VIEW_BACKEND_WEB and not is_large_image(image):
+                self._set_web_backend(WebRenderedImageBackend(image, OmeroGateway()), context=context)
+            elif is_large_image(image):
                 from omero_browser_qt import PyramidTileProvider
 
+                if backend_choice == VIEW_BACKEND_WEB:
+                    self._status.showMessage("WEB backend not yet supported for large images; using ICE")
                 provider = PyramidTileProvider(image)
-                self._set_tiled_data(provider)
+                self._set_tiled_data(provider, context=context)
             else:
-                result = load_image_data(image)
-                self._set_data(result["images"], result["metadata"])
+                provider = RegularImagePlaneProvider(image)
+                self._set_regular_provider(provider, context=context)
         except Exception as exc:  # noqa: BLE001
-            QMessageBox.critical(self, "OMERO Error", str(exc))
-        finally:
             self._status.clearMessage()
+            QMessageBox.critical(self, "OMERO Error", str(exc))
 
     # ------------------------------------------------------------------
     # Set image data
     # ------------------------------------------------------------------
 
     def _set_data(
-        self, volumes: list[np.ndarray], metadata: dict[str, Any]
+        self,
+        volumes: list[np.ndarray],
+        metadata: dict[str, Any],
+        *,
+        context=None,
     ) -> None:
         # Clean up tiled mode if active
         if self._tiled_item is not None:
             self._viewer._scene.removeItem(self._tiled_item)
             self._tiled_item = None
             self._tile_provider = None
-            self._overview_volumes = []
+            self._overview_cache.clear()
         self._viewer._pix_item.setVisible(True)
+        self._regular_provider = None
+        self._web_backend = None
 
         self._volumes = volumes
         self._metadata = metadata
+        self._selection_context = context
         self._pct_cache.clear()
+        self._viewer.set_scale_bar_um_per_pixel(self._metadata.get("pixel_size_x"))
 
-        # Channel colours
-        channels = metadata.get("channels", [])
-        if not channels:
-            channels = [
-                {"name": f"Ch{i}", "emission_wavelength": None, "color": None}
-                for i in range(len(volumes))
-            ]
+        channels = self._display_channels()
         self._channel_colors = _resolve_channel_colors(channels)
-
-        # Rebuild channel toggles
         self._rebuild_channel_toggles(channels)
 
-        # Z slider
-        nz = volumes[0].shape[0] if volumes else 0
-        self._z_slider.setMaximum(max(nz - 1, 0))
-        self._z_slider.setValue(nz // 2)
+        self._configure_dimension_controls()
 
-        self._update_viewer()
+        self._request_view_update()
 
-        name = metadata.get("name", "")
-        sx = metadata.get("size_x", "?")
-        sy = metadata.get("size_y", "?")
-        nz = metadata.get("size_z", "?")
-        nc = metadata.get("size_c", "?")
-        self._status.showMessage(f"{name}  —  {sx}×{sy}  Z={nz}  C={nc}")
+        self._refresh_metadata_labels()
+        self._backend_label.setText("")
+        self._3d_btn.setEnabled(_HAS_VISPY and len(self._volumes) > 0)
 
-        # Fit after the event loop has laid out the widget
-        QTimer.singleShot(50, self._viewer.fit_in_view)
+        self._fit_after_load()
 
-    def _set_tiled_data(self, provider) -> None:
+    def _set_regular_provider(self, provider, *, context=None) -> None:
+        """Set up the viewer for on-demand plane loading."""
+        if self._tiled_item is not None:
+            self._viewer._scene.removeItem(self._tiled_item)
+            self._tiled_item = None
+            self._tile_provider = None
+            self._overview_cache.clear()
+        self._viewer._pix_item.setVisible(True)
+
+        self._regular_provider = provider
+        self._web_backend = None
+        self._volumes = []
+        self._metadata = provider.metadata
+        self._selection_context = context
+        self._pct_cache.clear()
+        self._viewer.set_scale_bar_um_per_pixel(self._metadata.get("pixel_size_x"))
+        self._set_projection_modes(_PROJECTION_MODES)
+        self._backend_label.setText("ICE")
+        self._3d_btn.setEnabled(_HAS_VISPY)
+
+        channels = self._display_channels()
+        self._channel_colors = _resolve_channel_colors(channels)
+        self._rebuild_channel_toggles(channels)
+        self._configure_dimension_controls()
+        self._request_view_update()
+        self._refresh_metadata_labels()
+        self._fit_after_load()
+
+    def _set_web_backend(self, backend, *, context=None) -> None:
+        """Set up the viewer for server-rendered OMERO.web viewing."""
+        if self._tiled_item is not None:
+            self._viewer._scene.removeItem(self._tiled_item)
+            self._tiled_item = None
+            self._tile_provider = None
+            self._overview_cache.clear()
+        self._viewer._pix_item.setVisible(True)
+
+        self._web_backend = backend
+        self._regular_provider = None
+        self._volumes = []
+        self._metadata = backend.metadata
+        self._selection_context = context
+        self._pct_cache.clear()
+        self._viewer.set_scale_bar_um_per_pixel(self._metadata.get("pixel_size_x"))
+        self._set_projection_modes(_PROJECTION_MODES)
+        self._backend_label.setText("WEB")
+        self._3d_btn.setEnabled(False)
+        self._3d_btn.setToolTip("3D viewer requires ICE backend")
+
+        channels = self._display_channels()
+        self._channel_colors = _resolve_channel_colors(channels)
+        self._rebuild_channel_toggles(channels)
+        self._configure_dimension_controls()
+        self._request_view_update()
+        self._refresh_metadata_labels()
+        self._fit_after_load()
+
+    def _set_tiled_data(self, provider, *, context=None) -> None:
         """Set up the viewer in tiled pyramid mode."""
         # Clean up previous tiled item
         if self._tiled_item is not None:
@@ -658,29 +1691,28 @@ class ViewerWindow(QMainWindow):
         # Clear non-tiled state
         self._volumes = []
         self._pct_cache.clear()
+        self._overview_cache.clear()
+        self._regular_provider = None
+        self._web_backend = None
         self._tile_provider = provider
         self._viewer._pix_item.setVisible(False)
 
         meta = provider.metadata
         self._metadata = meta
+        self._selection_context = context
+        self._viewer.set_scale_bar_um_per_pixel(self._metadata.get("pixel_size_x"))
+        self._set_projection_modes(_PROJECTION_MODES)
+        self._backend_label.setText("ICE (tiled)")
+        self._3d_btn.setEnabled(False)
+        self._3d_btn.setToolTip("3D viewer not available for tiled images")
 
-        # Load overview (level 0, smallest) for quick display & contrast
-        self._overview_volumes = provider.load_overview()
-
-        # Channel colours
-        channels = meta.get("channels", [])
-        if not channels:
-            channels = [
-                {"name": f"Ch{i}", "emission_wavelength": None, "color": None}
-                for i in range(meta["size_c"])
-            ]
+        channels = self._display_channels()
         self._channel_colors = _resolve_channel_colors(channels)
         self._rebuild_channel_toggles(channels)
 
-        # Z slider
-        nz = meta.get("size_z", 1)
-        self._z_slider.setMaximum(max(nz - 1, 0))
-        self._z_slider.setValue(nz // 2)
+        if self._proj_combo.currentText() != "Slice":
+            self._proj_combo.setCurrentText("Slice")
+        self._configure_dimension_controls()
 
         # Create tiled item and add to scene
         item = TiledImageItem(provider)
@@ -690,24 +1722,17 @@ class ViewerWindow(QMainWindow):
         fw, fh = provider.full_size()
         self._viewer._scene.setSceneRect(QRectF(0, 0, fw, fh))
 
-        self._update_viewer()
+        self._request_view_update()
+        self._refresh_metadata_labels()
+        self._fit_after_load()
 
-        name = meta.get("name", "")
-        sx, sy = meta.get("size_x", "?"), meta.get("size_y", "?")
-        nc = meta.get("size_c", "?")
-        lvl = provider.n_levels
-        self._status.showMessage(
-            f"{name}  —  {sx}×{sy}  Z={nz}  C={nc}  ({lvl} pyramid levels)"
-        )
-        QTimer.singleShot(50, self._viewer.fit_in_view)
-
-    def _build_overview_pixmap(self, active, contrast):
+    def _build_overview_pixmap(self, active, contrast, overview_volumes):
         """Composite the level-0 overview for all *active* channels."""
         slices = []
         for c in active:
-            if c >= len(self._overview_volumes):
+            if c >= len(overview_volumes):
                 continue
-            arr = self._overview_volumes[c][0]  # (Y, X)
+            arr = overview_volumes[c][0]  # (Y, X)
             color = (
                 self._channel_colors[c]
                 if c < len(self._channel_colors)
@@ -735,38 +1760,205 @@ class ViewerWindow(QMainWindow):
             r, g, b = self._channel_colors[i] if i < len(self._channel_colors) else (200, 200, 200)
             btn = QPushButton(name)
             btn.setCheckable(True)
-            btn.setChecked(True)
+            btn.setChecked(bool(ch.get("active", True)))
             btn.setStyleSheet(
-                f"QPushButton {{ background: rgb({r},{g},{b}); color: #000; "
-                f"border-radius: 3px; padding: 2px 8px; font-weight: bold; }}"
-                f"QPushButton:!checked {{ background: #555; color: #aaa; }}"
+                f"QPushButton {{ background: rgba({r},{g},{b},210); color: #020617; "
+                f"border: none; border-radius: 999px; padding: 3px 12px; font-weight: 700; }}"
+                f"QPushButton:hover {{ background: rgba({r},{g},{b},235); }}"
+                f"QPushButton:checked {{ border: 2px solid rgba(255,255,255,110); }}"
+                f"QPushButton:!checked {{ background: #1e293b; color: #94a3b8; border: 1px solid #334155; }}"
             )
-            btn.toggled.connect(self._update_viewer)
+            btn.toggled.connect(self._request_view_update)
             # Insert before the stretch
             self._ch_row.insertWidget(self._ch_row.count() - 1, btn)
             self._channel_buttons.append(btn)
+
+    def _display_channels(self) -> list[dict]:
+        from omero_browser_qt import get_image_display_settings
+
+        settings = get_image_display_settings(self._metadata)
+        return [
+            {
+                "index": ch.index,
+                "name": ch.name,
+                "color": ch.color,
+                "emission_wavelength": ch.emission_wavelength,
+                "active": ch.active,
+                "window_start": ch.window_start,
+                "window_end": ch.window_end,
+            }
+            for ch in settings.channels
+        ]
+
+    def _current_channel_render_settings(self) -> list[dict]:
+        channels = self._display_channels()
+        for i, ch in enumerate(channels):
+            if i < len(self._channel_buttons):
+                ch["active"] = self._channel_buttons[i].isChecked()
+        return channels
+
+    def _set_projection_modes(self, modes: list[str]) -> None:
+        current = self._proj_combo.currentText()
+        self._proj_combo.blockSignals(True)
+        self._proj_combo.clear()
+        self._proj_combo.addItems(modes)
+        if current in modes:
+            self._proj_combo.setCurrentText(current)
+        else:
+            self._proj_combo.setCurrentIndex(0)
+        self._proj_combo.blockSignals(False)
+
+    def _configure_dimension_controls(self) -> None:
+        nz = max(int(self._metadata.get("size_z", 1)), 1)
+        nt = max(int(self._metadata.get("size_t", 1)), 1)
+        if nz <= 1 and self._proj_combo.currentText() != "Slice":
+            self._proj_combo.blockSignals(True)
+            self._proj_combo.setCurrentText("Slice")
+            self._proj_combo.blockSignals(False)
+        self._t_slider.blockSignals(True)
+        self._t_slider.setMaximum(nt - 1)
+        self._t_slider.setValue(max(0, min(int(self._metadata.get("default_t", 0)), nt - 1)))
+        self._t_slider.blockSignals(False)
+        default_z = max(0, min(int(self._metadata.get("default_z", nz // 2 if nz > 1 else 0)), nz - 1))
+        self._z_slider.blockSignals(True)
+        self._z_slider.setMaximum(nz - 1)
+        self._z_slider.setValue(default_z)
+        self._z_slider.blockSignals(False)
+
+    def _current_t(self) -> int:
+        nt = max(int(self._metadata.get("size_t", 1)), 1)
+        return max(0, min(self._t_slider.value(), nt - 1))
+
+    def _current_z(self) -> int:
+        nz = max(int(self._metadata.get("size_z", 1)), 1)
+        return max(0, min(self._z_slider.value(), nz - 1))
+
+    def _volume_frame(self, vol: np.ndarray) -> np.ndarray:
+        if vol.ndim == 4:
+            return vol[self._current_t()]
+        return vol
+
+    def _regular_channel_stack(self, c: int, progress=None) -> np.ndarray:
+        if self._regular_provider is not None:
+            return self._regular_provider.get_stack(c, self._current_t(), progress=progress)
+        if self._volumes:
+            if progress is not None:
+                frame = self._volume_frame(self._volumes[c])
+                progress(frame.shape[0], frame.shape[0])
+                return frame
+            return self._volume_frame(self._volumes[c])
+        raise RuntimeError("No regular image data available")
+
+    def _regular_channel_plane(self, c: int) -> np.ndarray:
+        if self._regular_provider is not None:
+            return self._regular_provider.get_plane(c, self._current_z(), self._current_t())
+        if self._volumes:
+            frame = self._volume_frame(self._volumes[c])
+            return frame[self._current_z()]
+        raise RuntimeError("No regular image data available")
+
+    def _prefetch_regular_neighbors(self, channels: list[int]) -> None:
+        if self._regular_provider is None or not channels:
+            return
+        try:
+            self._regular_provider.prefetch_neighbors(
+                channels,
+                self._current_z(),
+                self._current_t(),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _tiled_overview(
+        self,
+        mode: str,
+        z: int,
+        t: int,
+        request_id: int,
+        preview_callback=None,
+    ) -> list[np.ndarray]:
+        key = (mode, z if mode == "Slice" else -1, t)
+        if key not in self._overview_cache:
+            if mode == "Slice":
+                self._overview_cache[key] = self._tile_provider.load_overview(z=z, t=t)
+            else:
+                planes_per_channel = None
+                z_count = max(int(self._metadata.get("size_z", 1)), 1)
+                self._begin_progress(z_count, f"Computing {mode} overview…")
+                try:
+                    for zi in range(z_count):
+                        self._advance_progress(zi, f"Computing {mode} overview… Z {zi + 1}/{z_count}")
+                        self._ensure_render_current(request_id)
+                        volumes = self._tile_provider.load_overview(z=zi, t=t)
+                        if planes_per_channel is None:
+                            planes_per_channel = [[arr[0]] for arr in volumes]
+                        else:
+                            for stack, arr in zip(planes_per_channel, volumes, strict=False):
+                                stack.append(arr[0])
+                        if (
+                            preview_callback is not None
+                            and planes_per_channel is not None
+                            and ((zi + 1) % _PROGRESS_Z_STEP == 0 or (zi + 1) == z_count)
+                        ):
+                            preview = [
+                                _project_stack(np.stack(stack, axis=0), mode, z)[np.newaxis, ...]
+                                for stack in planes_per_channel
+                                if stack
+                            ]
+                            self._ensure_render_current(request_id)
+                            preview_callback(preview, zi + 1, z_count)
+                    if planes_per_channel is None:
+                        planes_per_channel = []
+                    self._ensure_render_current(request_id)
+                    self._overview_cache[key] = [
+                        _project_stack(np.stack(stack, axis=0), mode, z)[np.newaxis, ...]
+                        for stack in planes_per_channel
+                    ]
+                finally:
+                    self._advance_progress(z_count)
+                    self._end_progress()
+        return self._overview_cache[key]
+
+    def _refresh_metadata_labels(self) -> None:
+        name = self._metadata.get("name", "No image loaded")
+        sx = self._metadata.get("size_x", "—")
+        sy = self._metadata.get("size_y", "—")
+        sz = self._metadata.get("size_z", "—")
+        st = self._metadata.get("size_t", "—")
+        sc = self._metadata.get("size_c", "—")
+        extra = ""
+        if self._tile_provider is not None:
+            extra = f"  |  Pyramid levels {self._tile_provider.n_levels}"
+        pix_x = self._metadata.get("pixel_size_x")
+        pix_y = self._metadata.get("pixel_size_y")
+        scale = ""
+        if pix_x and pix_y:
+            scale = f"  |  {pix_x:g}×{pix_y:g} um/px"
+        elif pix_x:
+            scale = f"  |  {pix_x:g} um/px"
+        breadcrumb = ""
+        if self._selection_context is not None and self._selection_context.breadcrumb:
+            breadcrumb = self._selection_context.breadcrumb
+        self._path_label.setText(breadcrumb)
+        info = f"{name}  |  {sx}×{sy} px  |  Z {sz}  C {sc}  T {st}{scale}{extra}"
+        self._status.showMessage(info)
 
     # ------------------------------------------------------------------
     # Get current slice / projection
     # ------------------------------------------------------------------
 
     def _get_slice(self, vol: np.ndarray) -> np.ndarray:
+        frame = self._volume_frame(vol)
         mode = self._proj_combo.currentText()
-        if mode == "MIP":
-            return vol.max(axis=0)
-        if mode == "SUM":
-            return vol.sum(axis=0).astype(np.float64)
-        # Slice
-        z = self._z_slider.value()
-        z = max(0, min(z, vol.shape[0] - 1))
-        return vol[z]
+        return _project_stack(frame, mode, self._current_z())
 
     def _get_contrast(self, arr: np.ndarray, ch_idx: int) -> tuple[float, float]:
         lo_pct = self._lo_spin.value()
         hi_pct = self._hi_spin.value()
         mode = self._proj_combo.currentText()
-        z = self._z_slider.value() if mode == "Slice" else -1
-        key = (ch_idx, mode, z, lo_pct, hi_pct)
+        z = self._current_z() if mode == "Slice" else -1
+        t = self._current_t()
+        key = (ch_idx, mode, z, t, lo_pct, hi_pct)
         if key in self._pct_cache:
             return self._pct_cache[key]
         lo_val = float(np.percentile(arr, lo_pct))
@@ -780,60 +1972,281 @@ class ViewerWindow(QMainWindow):
 
     def _on_contrast_changed(self):
         self._pct_cache.clear()
-        self._update_viewer()
+        self._request_view_update()
+        if self._view_stack.currentIndex() == 1:
+            self._3d_debounce.start()  # restart 3-second wait
 
-    def _update_viewer(self):
-        # ---- Tiled pyramid mode ------------------------------------
-        if self._tiled_item is not None:
-            nz = self._metadata.get("size_z", 1)
-            z = self._z_slider.value()
+    def _update_viewer(self, request_id: int | None = None):
+        if request_id is None:
+            self._request_view_update()
+            return
+        if self._rendering:
+            self._pending_render = True
+            return
+        self._rendering = True
+        mode = self._proj_combo.currentText()
+        try:
+            # ---- WEB rendered mode ------------------------------------
+            if self._web_backend is not None:
+                nz = max(int(self._metadata.get("size_z", 1)), 1)
+                nt = max(int(self._metadata.get("size_t", 1)), 1)
+                z = self._current_z()
+                t = self._current_t()
+                self._z_label.setText(f"{z}/{nz - 1}")
+                self._t_label.setText(f"{t}/{nt - 1}")
+                self._z_slider.setEnabled(nz > 1 and mode == "Slice")
+                self._t_slider.setEnabled(nt > 1)
+                self._proj_combo.setEnabled(nz > 1 or mode == "Slice")
+                self._ensure_render_current(request_id)
+                channels = self._current_channel_render_settings()
+
+                if mode == "Slice":
+                    pix = self._web_backend.render_pixmap(
+                        z=z, t=t, mode="Slice", channels=channels,
+                    )
+                    self._ensure_render_current(request_id)
+                    self._viewer.set_pixmap(pix)
+                    self._status.showMessage("Rendered via OMERO.web (Slice)")
+                else:
+                    use_progress = mode in _SLOW_PROJECTION_MODES
+                    progress_total = nz + (1 if not use_progress else _projection_step_count(
+                        np.empty((nz, 1, 1, 3), dtype=np.uint8), mode
+                    ))
+                    if use_progress:
+                        # loading + projection steps
+                        progress_total = nz + _projection_step_count(
+                            np.empty((nz, 1, 1), dtype=np.uint8), mode
+                        )
+                    self._begin_progress(progress_total, f"Fetching {mode} planes from OMERO.web…")
+                    try:
+                        progress_done = 0
+
+                        def load_progress(step: int, total: int, *, base=0):
+                            self._advance_progress(
+                                base + min(step, total),
+                                f"Fetching rendered planes… {step}/{total}",
+                            )
+                            self._ensure_render_current(request_id)
+
+                        rgb_stack = self._web_backend.get_rendered_stack(
+                            t, channels, progress=load_progress,
+                        )
+                        progress_done = nz
+                        self._ensure_render_current(request_id)
+
+                        if use_progress:
+                            def proj_progress(step: int, total: int, *, base=progress_done):
+                                self._advance_progress(
+                                    base + min(step, total),
+                                    f"Computing {mode} projection… {step}/{total}",
+                                )
+                                self._ensure_render_current(request_id)
+                        else:
+                            proj_progress = None
+
+                        result = _project_rgb_stack(rgb_stack, mode, z, progress=proj_progress)
+                        self._ensure_render_current(request_id)
+                        pix = _rgb_array_to_pixmap(result)
+                        self._viewer.set_pixmap(pix)
+                        self._status.showMessage(f"WEB {mode} projection ({nz} Z-planes)")
+                    finally:
+                        self._end_progress()
+                return
+
+            # ---- Tiled pyramid mode ------------------------------------
+            if self._tiled_item is not None:
+                nz = self._metadata.get("size_z", 1)
+                nt = self._metadata.get("size_t", 1)
+                z = self._current_z()
+                t = self._current_t()
+                self._z_label.setText(f"{z}/{nz - 1}")
+                self._t_label.setText(f"{t}/{nt - 1}")
+                self._z_slider.setEnabled(nz > 1 and mode == "Slice")
+                self._t_slider.setEnabled(nt > 1)
+                self._proj_combo.setEnabled(nz > 1)
+
+                active = []
+                for i, btn in enumerate(self._channel_buttons):
+                    if btn.isChecked():
+                        active.append(i)
+
+                contrast: dict[int, tuple[float, float]] = {}
+                preview_contrast: dict[int, tuple[float, float]] = {}
+
+                def preview_callback(preview_volumes, loaded_z: int, total_z: int) -> None:
+                    self._ensure_render_current(request_id)
+                    preview_contrast.clear()
+                    for c in active:
+                        if c < len(preview_volumes):
+                            arr = preview_volumes[c][0]
+                            preview_contrast[c] = self._get_contrast(arr, c)
+                    preview_pix = self._build_overview_pixmap(active, preview_contrast, preview_volumes)
+                    self._tiled_item.set_overview(preview_pix)
+                    self._status.showMessage(
+                        f"Preview ready… finishing {mode} overview ({loaded_z}/{total_z} Z)"
+                    )
+                    QApplication.processEvents()
+
+                overview_volumes = self._tiled_overview(
+                    mode,
+                    z,
+                    t,
+                    request_id,
+                    preview_callback=preview_callback if mode in _SLOW_PROJECTION_MODES else None,
+                )
+                self._ensure_render_current(request_id)
+                for c in active:
+                    if c < len(overview_volumes):
+                        arr = overview_volumes[c][0]  # (Y, X)
+                        contrast[c] = self._get_contrast(arr, c)
+
+                overview_pix = self._build_overview_pixmap(active, contrast, overview_volumes)
+                self._tiled_item.set_overview(overview_pix)
+                self._tiled_item.set_display(
+                    active, self._channel_colors, contrast, z, t, mode
+                )
+                return
+
+            # ---- Regular (non-tiled) mode ------------------------------
+            if self._regular_provider is None and not self._volumes:
+                return
+
+            nz = max(int(self._metadata.get("size_z", 1)), 1)
+            nt = max(int(self._metadata.get("size_t", 1)), 1)
+            z = self._current_z()
+            t = self._current_t()
             self._z_label.setText(f"{z}/{nz - 1}")
-            self._z_slider.setEnabled(nz > 1)
+            self._t_label.setText(f"{t}/{nt - 1}")
+            self._z_slider.setEnabled(mode == "Slice")
+            self._t_slider.setEnabled(nt > 1)
+            self._proj_combo.setEnabled(nz > 1)
 
-            active = []
-            for i, btn in enumerate(self._channel_buttons):
-                if btn.isChecked():
-                    active.append(i)
+            slices = []
+            channel_count = self._metadata.get("size_c", len(self._volumes))
+            active_indices = [
+                i for i, btn in enumerate(self._channel_buttons[:channel_count])
+                if btn.isChecked()
+            ]
+            use_progress = mode in _SLOW_PROJECTION_MODES and len(active_indices) > 0
+            channel_stacks: dict[int, np.ndarray] = {}
+            progress_total = 0
+            if use_progress:
+                for _i in active_indices:
+                    progress_total += nz
+                    progress_total += 1
+                    progress_total += _projection_step_count(np.empty((nz, 1, 1), dtype=np.uint8), mode)
+            if use_progress:
+                self._begin_progress(progress_total, f"Loading {mode} data…")
+            try:
+                progress_done = 0
+                if use_progress and mode != "Slice":
+                    for done, i in enumerate(active_indices, start=1):
+                        self._ensure_render_current(request_id)
+                        load_steps = nz
 
-            contrast: dict[int, tuple[float, float]] = {}
-            for c in active:
-                if c < len(self._overview_volumes):
-                    arr = self._overview_volumes[c][0]  # (Y, X)
-                    contrast[c] = self._get_contrast(arr, c)
+                        def load_progress(step: int, total: int, *, channel_index=done, base=progress_done):
+                            overall = base + min(step, total)
+                            self._advance_progress(
+                                overall,
+                                f"Loading {mode} data… channel {channel_index}/{len(active_indices)}",
+                            )
+                            self._ensure_render_current(request_id)
 
-            overview_pix = self._build_overview_pixmap(active, contrast)
-            self._tiled_item.set_overview(overview_pix)
-            self._tiled_item.set_display(
-                active, self._channel_colors, contrast, z
-            )
+                        stack = self._regular_channel_stack(i, progress=load_progress)
+                        channel_stacks[i] = stack
+                        progress_done += load_steps
+                        self._advance_progress(
+                            progress_done,
+                            f"Preparing {mode} preview…",
+                        )
+                        self._ensure_render_current(request_id)
+
+                    preview_slices = []
+                    for i in active_indices:
+                        self._ensure_render_current(request_id)
+                        preview_stack = _downsample_stack_for_preview(channel_stacks[i])
+                        preview_arr = _project_stack(preview_stack, mode, min(self._current_z(), preview_stack.shape[0] - 1))
+                        color = self._channel_colors[i] if i < len(self._channel_colors) else (255, 255, 255)
+                        lo, hi = self._get_contrast(preview_arr, i)
+                        preview_slices.append((preview_arr, color, (lo, hi)))
+                    progress_done += len(active_indices)
+                    if preview_slices:
+                        self._viewer.set_pixmap(_composite_to_pixmap(preview_slices))
+                        self._status.showMessage(f"Preview ready… finishing {mode} projection")
+                        QApplication.processEvents()
+                    self._ensure_render_current(request_id)
+
+                for done, i in enumerate(active_indices, start=1):
+                    self._ensure_render_current(request_id)
+                    if mode == "Slice":
+                        arr = self._regular_channel_plane(i)
+                        stack = arr[np.newaxis, ...]
+                    else:
+                        stack = channel_stacks[i] if i in channel_stacks else self._regular_channel_stack(i)
+                    channel_steps = _projection_step_count(stack, mode)
+                    if use_progress:
+                        def progress(step: int, total: int, *, channel_index=done, base=progress_done):
+                            overall = base + min(step, total)
+                            self._advance_progress(
+                                overall,
+                                f"Computing {mode} projection… channel {channel_index}/{len(active_indices)}",
+                            )
+                            self._ensure_render_current(request_id)
+                    else:
+                        progress = None
+                    if mode != "Slice":
+                        arr = _project_stack(stack, mode, self._current_z(), progress=progress)
+                    color = self._channel_colors[i] if i < len(self._channel_colors) else (255, 255, 255)
+                    lo, hi = self._get_contrast(arr, i)
+                    slices.append((arr, color, (lo, hi)))
+                    if use_progress:
+                        progress_done += channel_steps
+                        self._advance_progress(
+                            progress_done,
+                            f"Computing {mode} projection… channel {done}/{len(active_indices)}",
+                        )
+                        self._ensure_render_current(request_id)
+            finally:
+                if use_progress:
+                    self._end_progress()
+
+            self._ensure_render_current(request_id)
+            if slices:
+                pix = _composite_to_pixmap(slices)
+                self._viewer.set_pixmap(pix)
+            else:
+                self._viewer.set_pixmap(QPixmap())
+            if mode == "Slice":
+                self._prefetch_regular_neighbors(active_indices)
+        except _RenderCancelled:
             return
+        finally:
+            self._rendering = False
+            if self._pending_render:
+                self._pending_render = False
+                QTimer.singleShot(0, self._request_view_update)
 
-        # ---- Regular (non-tiled) mode ------------------------------
-        if not self._volumes:
-            return
 
-        # Update Z label
-        nz = self._volumes[0].shape[0]
-        z = self._z_slider.value()
-        self._z_label.setText(f"{z}/{nz - 1}")
-        self._z_slider.setEnabled(self._proj_combo.currentText() == "Slice")
+# ======================================================================
+# 3D Volume Viewer helpers (vispy)
+# ======================================================================
 
-        slices = []
-        for i, vol in enumerate(self._volumes):
-            if i >= len(self._channel_buttons):
-                break
-            if not self._channel_buttons[i].isChecked():
-                continue
-            arr = self._get_slice(vol)
-            color = self._channel_colors[i] if i < len(self._channel_colors) else (255, 255, 255)
-            lo, hi = self._get_contrast(arr, i)
-            slices.append((arr, color, (lo, hi)))
+if _HAS_VISPY:
 
-        if slices:
-            pix = _composite_to_pixmap(slices)
-            self._viewer.set_pixmap(pix)
-        else:
-            self._viewer.set_pixmap(QPixmap())
+    class _ChannelColormap(BaseColormap):
+        """Translucent colormap that ramps a single RGB channel color."""
+
+        glsl_map = ""
+
+        def __init__(self, rgb: tuple[int, int, int]):
+            r, g, b = rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0
+            self.glsl_map = (
+                "vec4 channel_cmap(float t) {{\n"
+                "    return vec4({r:.4f} * t, {g:.4f} * t, {b:.4f} * t, "
+                "clamp(t * 1.2, 0.0, 1.0));\n"
+                "}}\n"
+            ).format(r=r, g=g, b=b)
+            super().__init__()
 
 
 # ======================================================================
@@ -842,7 +2255,7 @@ class ViewerWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("OMERO Viewer Demo")
+    app.setApplicationName("OMERO Viewer")
     win = ViewerWindow()
     win.show()
     code = app.exec()

@@ -52,6 +52,23 @@ def _icon_for_type(node_type: NodeType) -> QIcon | None:
     return None
 
 
+def _owner_id_of(wrapper: Any) -> int | None:
+    """Best-effort owner id lookup across OMERO wrapper types."""
+    try:
+        owner = wrapper.getOwner()
+        if owner is not None:
+            return int(owner.getId())
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        details = wrapper.getDetails()
+        if details is not None and details.owner is not None:
+            return int(details.owner.id.val)
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 class NodeType(IntEnum):
     ROOT = auto()
     PROJECT = auto()
@@ -109,6 +126,7 @@ class OmeroTreeItem(QStandardItem):
         omero_id: int | None = None,
         wrapper: Any = None,
         child_count: int | None = None,
+        owner_id: int | None = None,
     ):
         display = label
         if child_count is not None and child_count >= 0:
@@ -119,6 +137,7 @@ class OmeroTreeItem(QStandardItem):
         self.omero_id = omero_id
         self._wrapper = wrapper
         self._has_fetched = False
+        self._owner_id = owner_id
 
         self.setData(wrapper, WRAPPER_ROLE)
         self.setData(int(node_type), NODE_TYPE_ROLE)
@@ -147,35 +166,67 @@ class OmeroTreeItem(QStandardItem):
     def yield_children(self, conn):
         """Generator that yields ``(label, NodeType, id, wrapper, child_count)``
         tuples for each child.  Called from a background thread."""
+        opts: dict[str, Any] = {"order_by": "obj.name"}
+        if self._owner_id is not None:
+            opts["experimenter"] = self._owner_id
+
         if self.node_type == NodeType.PROJECT:
-            for ds in conn.getObjects(
+            datasets = [
+                ds
+                for ds in conn.getObjects(
                 "Dataset",
-                opts={"project": self.omero_id, "order_by": "obj.name"},
-            ):
-                n_img = ds.countChildren()
+                opts={**opts, "project": self.omero_id},
+                )
+                if self._owner_id is None or _owner_id_of(ds) == self._owner_id
+            ]
+            for ds in datasets:
+                images = [
+                    img
+                    for img in conn.getObjects(
+                        "Image",
+                        opts={**opts, "dataset": ds.getId()},
+                    )
+                    if self._owner_id is None or _owner_id_of(img) == self._owner_id
+                ]
+                n_img = len(images)
                 yield (ds.getName(), NodeType.DATASET, ds.getId(), ds, n_img)
 
         elif self.node_type == NodeType.DATASET:
             for img in conn.getObjects(
                 "Image",
-                opts={"dataset": self.omero_id, "order_by": "obj.name"},
+                opts={**opts, "dataset": self.omero_id},
             ):
-                yield (img.getName(), NodeType.IMAGE, img.getId(), img, None)
+                if self._owner_id is None or _owner_id_of(img) == self._owner_id:
+                    yield (img.getName(), NodeType.IMAGE, img.getId(), img, None)
 
         elif self.node_type == NodeType.ORPHANED_DATASETS:
-            for ds in conn.getObjects(
+            datasets = [
+                ds
+                for ds in conn.getObjects(
                 "Dataset",
-                opts={"orphaned": True, "order_by": "obj.name"},
-            ):
-                n_img = ds.countChildren()
+                opts={**opts, "orphaned": True},
+                )
+                if self._owner_id is None or _owner_id_of(ds) == self._owner_id
+            ]
+            for ds in datasets:
+                images = [
+                    img
+                    for img in conn.getObjects(
+                        "Image",
+                        opts={**opts, "dataset": ds.getId()},
+                    )
+                    if self._owner_id is None or _owner_id_of(img) == self._owner_id
+                ]
+                n_img = len(images)
                 yield (ds.getName(), NodeType.DATASET, ds.getId(), ds, n_img)
 
         elif self.node_type == NodeType.ORPHANED_IMAGES:
             for img in conn.getObjects(
                 "Image",
-                opts={"orphaned": True, "order_by": "obj.name"},
+                opts={**opts, "orphaned": True},
             ):
-                yield (img.getName(), NodeType.IMAGE, img.getId(), img, None)
+                if self._owner_id is None or _owner_id_of(img) == self._owner_id:
+                    yield (img.getName(), NodeType.IMAGE, img.getId(), img, None)
 
 
 class OmeroTreeModel(QStandardItemModel):
@@ -191,6 +242,7 @@ class OmeroTreeModel(QStandardItemModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._conn = None
+        self._owner_id: int | None = None
         self._workers: list[_FetchChildrenWorker] = []
         self.setHorizontalHeaderLabels(["OMERO"])
 
@@ -209,6 +261,7 @@ class OmeroTreeModel(QStandardItemModel):
             If given, filter objects to this experimenter.
         """
         self._conn = conn
+        self._owner_id = owner_id
         self.clear()
         self.setHorizontalHeaderLabels(["OMERO"])
         self.loading_started.emit()
@@ -217,35 +270,63 @@ class OmeroTreeModel(QStandardItemModel):
         if owner_id is not None:
             opts["experimenter"] = owner_id
 
-        # Projects
+        # Projects owned by the selected user
         for proj in conn.getObjects("Project", opts=opts):
-            n_ds = proj.countChildren()
+            if owner_id is not None and _owner_id_of(proj) != owner_id:
+                continue
+            datasets = [
+                ds
+                for ds in conn.getObjects(
+                    "Dataset",
+                    opts={**opts, "project": proj.getId()},
+                )
+                if owner_id is None or _owner_id_of(ds) == owner_id
+            ]
+            n_ds = len(datasets)
+            if n_ds == 0:
+                continue
             item = OmeroTreeItem(
-                proj.getName(), NodeType.PROJECT, proj.getId(), proj, n_ds
+                proj.getName(), NodeType.PROJECT, proj.getId(), proj, n_ds, owner_id=owner_id
             )
             self.appendRow(item)
 
-        # Orphaned datasets
+        # Orphaned datasets appear directly at root, matching the OMERO web client.
         orphan_ds_opts = dict(opts, orphaned=True)
-        orphan_ds = list(conn.getObjects("Dataset", opts=orphan_ds_opts))
-        if orphan_ds:
-            folder = OmeroTreeItem(
-                "Orphaned Datasets",
-                NodeType.ORPHANED_DATASETS,
-                child_count=len(orphan_ds),
+        for ds in conn.getObjects("Dataset", opts=orphan_ds_opts):
+            if owner_id is not None and _owner_id_of(ds) != owner_id:
+                continue
+            images = [
+                img
+                for img in conn.getObjects(
+                    "Image",
+                    opts={**opts, "dataset": ds.getId()},
+                )
+                if owner_id is None or _owner_id_of(img) == owner_id
+            ]
+            item = OmeroTreeItem(
+                ds.getName(),
+                NodeType.DATASET,
+                ds.getId(),
+                ds,
+                len(images),
+                owner_id=owner_id,
             )
-            self.appendRow(folder)
+            self.appendRow(item)
 
-        # Orphaned images
+        # Keep the virtual orphaned-images folder visible, like the web client.
         orphan_img_opts = dict(opts, orphaned=True)
-        orphan_imgs = list(conn.getObjects("Image", opts=orphan_img_opts))
-        if orphan_imgs:
-            folder = OmeroTreeItem(
-                "Orphaned Images",
-                NodeType.ORPHANED_IMAGES,
-                child_count=len(orphan_imgs),
-            )
-            self.appendRow(folder)
+        orphan_imgs = [
+            img
+            for img in conn.getObjects("Image", opts=orphan_img_opts)
+            if owner_id is None or _owner_id_of(img) == owner_id
+        ]
+        folder = OmeroTreeItem(
+            "Orphaned Images",
+            NodeType.ORPHANED_IMAGES,
+            child_count=len(orphan_imgs),
+            owner_id=owner_id,
+        )
+        self.appendRow(folder)
 
         self.loading_finished.emit()
 
@@ -271,7 +352,14 @@ class OmeroTreeModel(QStandardItemModel):
         parent_item.removeRows(0, parent_item.rowCount())
 
         for label, ntype, oid, wrapper, child_count in children:
-            child = OmeroTreeItem(label, ntype, oid, wrapper, child_count)
+            child = OmeroTreeItem(
+                label,
+                ntype,
+                oid,
+                wrapper,
+                child_count,
+                owner_id=parent_item._owner_id,
+            )
             parent_item.appendRow(child)
 
         # Clean up finished workers

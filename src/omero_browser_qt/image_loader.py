@@ -161,6 +161,132 @@ def load_image_data(image) -> dict[str, Any]:
     return {"images": volumes, "metadata": meta}
 
 
+class RegularImagePlaneProvider:
+    """On-demand plane/stack loader for regular OMERO images.
+
+    Slice viewing can fetch only the currently needed ``(c, z, t)`` plane,
+    while projection modes can request a full ``(Z, Y, X)`` stack for the
+    selected channel/timepoint.
+    """
+
+    def __init__(self, image, max_cache_mb: int = 256):
+        self._image = image
+        self._meta = get_image_metadata(image)
+        self._dtype = np.dtype(self._meta["pixel_type"])
+        self._be_dtype = self._dtype.newbyteorder(">")
+        self._cache: OrderedDict = OrderedDict()
+        self._max_bytes = max_cache_mb * 1024 * 1024
+        self._cur_bytes = 0
+        self._prefetching: set[tuple[int, int, int]] = set()
+        self._lock = threading.Lock()
+
+    @property
+    def metadata(self) -> dict[str, Any]:
+        return self._meta
+
+    def _evict(self, needed: int) -> None:
+        while self._cur_bytes + needed > self._max_bytes and self._cache:
+            _, arr = self._cache.popitem(last=False)
+            self._cur_bytes -= arr.nbytes
+
+    def _remember(self, key, arr: np.ndarray) -> np.ndarray:
+        with self._lock:
+            self._evict(arr.nbytes)
+            self._cache[key] = arr
+            self._cache.move_to_end(key)
+            self._cur_bytes += arr.nbytes
+        return arr
+
+    def get_plane(self, c: int, z: int, t: int = 0) -> np.ndarray:
+        key = ("plane", c, z, t)
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+
+        stack_key = ("stack", c, t)
+        with self._lock:
+            if stack_key in self._cache:
+                self._cache.move_to_end(stack_key)
+                return self._cache[stack_key][z]
+
+        sy, sx = self._meta["size_y"], self._meta["size_x"]
+        with raw_pixels_store(self._image) as ps:
+            raw = ps.getPlane(z, c, t)
+        arr = np.frombuffer(raw, dtype=self._be_dtype).reshape(sy, sx).astype(self._dtype)
+        return self._remember(key, arr)
+
+    def get_stack(self, c: int, t: int = 0, progress=None) -> np.ndarray:
+        key = ("stack", c, t)
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                if progress is not None:
+                    progress(self._meta["size_z"], self._meta["size_z"])
+                return self._cache[key]
+
+        sy, sx = self._meta["size_y"], self._meta["size_x"]
+        sz = self._meta["size_z"]
+        planes = []
+        with raw_pixels_store(self._image) as ps:
+            for z in range(sz):
+                raw = ps.getPlane(z, c, t)
+                arr = np.frombuffer(raw, dtype=self._be_dtype).reshape(sy, sx).astype(self._dtype)
+                planes.append(arr)
+                if progress is not None and (((z + 1) % 5 == 0) or (z + 1 == sz)):
+                    progress(z + 1, sz)
+        stack = np.stack(planes, axis=0)
+        return self._remember(key, stack)
+
+    def prefetch_planes(self, requests: list[tuple[int, int, int]]) -> None:
+        """Asynchronously prefetch ``(c, z, t)`` planes into the cache."""
+        todo: list[tuple[int, int, int]] = []
+        sz = max(int(self._meta["size_z"]), 1)
+        st = max(int(self._meta["size_t"]), 1)
+        sc = max(int(self._meta["size_c"]), 1)
+        with self._lock:
+            for c, z, t in requests:
+                if not (0 <= c < sc and 0 <= z < sz and 0 <= t < st):
+                    continue
+                cache_key = ("plane", c, z, t)
+                stack_key = ("stack", c, t)
+                req = (c, z, t)
+                if (
+                    cache_key in self._cache
+                    or stack_key in self._cache
+                    or req in self._prefetching
+                ):
+                    continue
+                self._prefetching.add(req)
+                todo.append(req)
+        for req in todo:
+            worker = threading.Thread(
+                target=self._prefetch_plane_worker,
+                args=req,
+                daemon=True,
+            )
+            worker.start()
+
+    def prefetch_neighbors(self, channels: list[int], z: int, t: int) -> None:
+        """Prefetch nearby Z/T planes for active channels."""
+        requests: list[tuple[int, int, int]] = []
+        for c in channels:
+            for dz in (-1, 1):
+                requests.append((c, z + dz, t))
+            for dt in (-1, 1):
+                requests.append((c, z, t + dt))
+        self.prefetch_planes(requests)
+
+    def _prefetch_plane_worker(self, c: int, z: int, t: int) -> None:
+        try:
+            self.get_plane(c, z, t)
+        except Exception:  # noqa: BLE001
+            log.debug("Plane prefetch failed for c=%s z=%s t=%s", c, z, t)
+        finally:
+            with self._lock:
+                self._prefetching.discard((c, z, t))
+
+
 # ------------------------------------------------------------------
 # Lazy / dask-based loading for large or pyramidal images (ICE tiles)
 # ------------------------------------------------------------------

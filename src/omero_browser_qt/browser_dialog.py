@@ -45,6 +45,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .gateway import OmeroGateway
+from .selection_context import SelectedImageContext
 from .tree_model import NODE_TYPE_ROLE, WRAPPER_ROLE, NodeType, OmeroTreeModel
 
 log = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ log = logging.getLogger(__name__)
 _SETTINGS_GROUP_KEY = "omero_browser_qt/last_group_id"
 _SETTINGS_OWNER_KEY = "omero_browser_qt/last_owner_id"
 _SETTINGS_PATH_KEY = "omero_browser_qt/last_tree_path"
+_SETTINGS_BACKEND_KEY = "omero_browser_qt/last_backend"
 
 
 # ------------------------------------------------------------------
@@ -126,6 +128,7 @@ class OmeroBrowserDialog(QDialog):
     """
 
     images_selected = pyqtSignal(list)
+    LOGOUT_CODE = 1001
 
     def __init__(self, parent=None, *, gateway: OmeroGateway | None = None):
         super().__init__(parent)
@@ -169,13 +172,15 @@ class OmeroBrowserDialog(QDialog):
         top.addWidget(QLabel("Username:"))
         top.addWidget(self._user_label)
         top.addStretch()
-        ice_lbl = QLabel("ICE")
-        ice_lbl.setToolTip("Pixel API: ICE — Access to raw pixel data")
-        top.addWidget(ice_lbl)
-        ice_dot = QLabel("●")
-        ice_dot.setStyleSheet("color: #4caf50; font-size: 16px;")
-        ice_dot.setToolTip("Access to raw pixel data")
-        top.addWidget(ice_dot)
+        top.addWidget(QLabel("Backend:"))
+        self._backend_combo = QComboBox()
+        self._backend_combo.addItems(["ICE", "WEB"])
+        self._backend_combo.setToolTip(
+            "ICE = raw pixel data access\n"
+            "WEB = faster server-rendered images"
+        )
+        self._backend_combo.setCurrentText("ICE")
+        top.addWidget(self._backend_combo)
         root.addLayout(top)
 
         # --- Splitter (left tree | right detail) ---
@@ -255,6 +260,14 @@ class OmeroBrowserDialog(QDialog):
 
         # --- Bottom bar ---
         bottom = QHBoxLayout()
+        self._cancel_btn = QPushButton("Cancel")
+        self._cancel_btn.setMinimumWidth(100)
+        self._cancel_btn.clicked.connect(self.reject)
+        bottom.addWidget(self._cancel_btn)
+        self._logout_btn = QPushButton("Logout")
+        self._logout_btn.setMinimumWidth(100)
+        self._logout_btn.clicked.connect(self._on_logout)
+        bottom.addWidget(self._logout_btn)
         bottom.addStretch()
         self._import_btn = QPushButton("Import")
         self._import_btn.setEnabled(False)
@@ -303,6 +316,12 @@ class OmeroBrowserDialog(QDialog):
         self._refresh_owners()
         self._refresh_tree()
         self._restore_tree_path()
+
+        # Restore last-used backend
+        settings2 = QSettings("omero_browser_qt", "omero_browser_qt")
+        last_backend = settings2.value(_SETTINGS_BACKEND_KEY, "ICE")
+        if last_backend in ("WEB", "ICE"):
+            self._backend_combo.setCurrentText(last_backend)
 
     def _refresh_owners(self) -> None:
         self._owner_combo.blockSignals(True)
@@ -390,6 +409,10 @@ class OmeroBrowserDialog(QDialog):
             self.images_selected.emit(imgs)
             self.accept()
 
+    def _on_logout(self) -> None:
+        self._gw.disconnect()
+        self.done(self.LOGOUT_CODE)
+
     # ==================================================================
     # State persistence (group, owner, tree path)
     # ==================================================================
@@ -404,6 +427,8 @@ class OmeroBrowserDialog(QDialog):
 
         oid = self._owner_combo.currentData()
         settings.setValue(_SETTINGS_OWNER_KEY, "" if oid is None else int(oid))
+
+        settings.setValue(_SETTINGS_BACKEND_KEY, self._backend_combo.currentText())
 
         # Save the tree path as a list of OMERO object ids
         path = self._get_selected_tree_path()
@@ -564,6 +589,75 @@ class OmeroBrowserDialog(QDialog):
         """Return the list of selected OMERO ImageWrapper objects."""
         return self._selected_image_wrappers()
 
+    def get_selected_image_contexts(self) -> list[SelectedImageContext]:
+        """Return structured selection data for the selected images."""
+        contexts: list[SelectedImageContext] = []
+        for idx in self._tree.selectionModel().selectedIndexes():
+            src = self._proxy.mapToSource(idx)
+            if OmeroTreeModel.get_node_type(src) != NodeType.IMAGE:
+                continue
+            ctx = self._context_from_source_index(src)
+            if ctx is not None:
+                contexts.append(ctx)
+        return contexts
+
+    @classmethod
+    def select_images(
+        cls,
+        parent=None,
+        *,
+        gateway: OmeroGateway | None = None,
+    ) -> list:
+        """Show login if needed, then browse and return selected images.
+
+        Returns an empty list when the user cancels or closes the dialogs.
+        If the user logs out from the browser, the login dialog is shown
+        again and the flow continues.
+        """
+        from .login_dialog import LoginDialog
+
+        gw = gateway or OmeroGateway()
+
+        while True:
+            if not gw.is_connected():
+                dlg = LoginDialog(parent, gateway=gw)
+                if dlg.exec() != LoginDialog.DialogCode.Accepted:
+                    return []
+
+            browser = cls(parent, gateway=gw)
+            result = browser.exec()
+            if result == cls.LOGOUT_CODE:
+                continue
+            if result != cls.DialogCode.Accepted:
+                return []
+            return browser.get_selected_images()
+
+    @classmethod
+    def select_image_contexts(
+        cls,
+        parent=None,
+        *,
+        gateway: OmeroGateway | None = None,
+    ) -> list[SelectedImageContext]:
+        """Show login if needed, then browse and return selected contexts."""
+        from .login_dialog import LoginDialog
+
+        gw = gateway or OmeroGateway()
+
+        while True:
+            if not gw.is_connected():
+                dlg = LoginDialog(parent, gateway=gw)
+                if dlg.exec() != LoginDialog.DialogCode.Accepted:
+                    return []
+
+            browser = cls(parent, gateway=gw)
+            result = browser.exec()
+            if result == cls.LOGOUT_CODE:
+                continue
+            if result != cls.DialogCode.Accepted:
+                return []
+            return browser.get_selected_image_contexts()
+
     def _selected_image_wrappers(self) -> list:
         """Collect image wrappers from current tree selection."""
         wrappers = []
@@ -575,3 +669,52 @@ class OmeroBrowserDialog(QDialog):
                 if w is not None:
                     wrappers.append(w)
         return wrappers
+
+    def _context_from_source_index(self, src_idx: QModelIndex) -> SelectedImageContext | None:
+        item = self._model.itemFromIndex(src_idx)
+        if item is None:
+            return None
+        wrapper = OmeroTreeModel.get_wrapper(src_idx)
+        if wrapper is None:
+            return None
+
+        project_id = None
+        project_name = None
+        dataset_id = None
+        dataset_name = None
+        path_labels: list[str] = []
+
+        from .tree_model import OmeroTreeItem
+
+        cursor = item
+        while isinstance(cursor, OmeroTreeItem):
+            label = cursor.text()
+            if " (" in label:
+                label = label.rsplit(" (", 1)[0]
+            if cursor.node_type not in {NodeType.ORPHANED_IMAGES, NodeType.ORPHANED_DATASETS}:
+                path_labels.append(label)
+            if cursor.node_type == NodeType.PROJECT and project_id is None:
+                project_id = cursor.omero_id
+                project_name = label
+            elif cursor.node_type == NodeType.DATASET and dataset_id is None:
+                dataset_id = cursor.omero_id
+                dataset_name = label
+            cursor = cursor.parent()
+
+        path_labels.reverse()
+
+        return SelectedImageContext(
+            image=wrapper,
+            image_id=getattr(wrapper, "getId", lambda: None)(),
+            image_name=getattr(wrapper, "getName", lambda: "")(),
+            group_id=self._group_combo.currentData(),
+            group_name=self._group_combo.currentText() or None,
+            owner_id=self._owner_combo.currentData(),
+            owner_name=self._owner_combo.currentText() or None,
+            project_id=project_id,
+            project_name=project_name,
+            dataset_id=dataset_id,
+            dataset_name=dataset_name,
+            path_labels=tuple(path_labels),
+            backend=self._backend_combo.currentText(),
+        )
