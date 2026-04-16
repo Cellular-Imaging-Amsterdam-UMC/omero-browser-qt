@@ -88,7 +88,7 @@ From a source checkout, you can also run:
 python -m omero_browser_qt.omero_viewer
 ```
 
-See the [OMERO Viewer guide](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/examples/omero-viewer/) for controls and features.
+See the [OMERO Viewer guide](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/examples/omero-viewer.html) for controls and features.
 
 ## Documentation
 
