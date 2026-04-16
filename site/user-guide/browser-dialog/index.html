@@ -485,10 +485,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#backend-selector" class="md-nav__link">
+  <a href="#selection-context-backend" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Backend selector
+        Selection context backend
       
     </span>
   </a>
@@ -519,34 +519,6 @@
     
   
     Pixel Loading
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../web-backend/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    WEB Backend
   
 
     
@@ -852,34 +824,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/webclient/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Web Client
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../api/selection_context/" class="md-nav__link">
         
   
@@ -1137,14 +1081,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../examples/demo-viewer/" class="md-nav__link">
+      <a href="../../examples/omero-viewer/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Demo Viewer
+    OMERO Viewer
   
 
     
@@ -1301,10 +1245,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#backend-selector" class="md-nav__link">
+  <a href="#selection-context-backend" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Backend selector
+        Selection context backend
       
     </span>
   </a>
@@ -1341,7 +1285,7 @@ projects, datasets, and images on an OMERO server.</p>
 <h2 id="layout">Layout<a class="headerlink" href="#layout" title="Permanent link">&para;</a></h2>
 <p>The dialog is divided into:</p>
 <ul>
-<li><strong>Header bar</strong> — shows the connected server, username, and backend selector (ICE / WEB)</li>
+<li><strong>Header bar</strong> — shows the connected server and username</li>
 <li><strong>Left panel</strong> — group/owner filter combos, a lazy-loading project → dataset → image tree, and a name filter</li>
 <li><strong>Right panel</strong> — 256 × 256 thumbnail preview and an attribute table (dimensions, pixel sizes, acquisition date, …)</li>
 <li><strong>Footer</strong> — <em>Import</em> button to confirm the selection</li>
@@ -1375,12 +1319,9 @@ All selected images are returned by <code>get_selected_images()</code>.</p>
 <h2 id="filtering">Filtering<a class="headerlink" href="#filtering" title="Permanent link">&para;</a></h2>
 <p>Type in the <strong>Filter</strong> field at the bottom of the tree panel to filter
 images by name. The filter applies to the currently expanded datasets.</p>
-<h2 id="backend-selector">Backend selector<a class="headerlink" href="#backend-selector" title="Permanent link">&para;</a></h2>
-<p>The <strong>ICE / WEB</strong> toggle in the header bar controls which rendering
-backend the demo viewer uses. The browser dialog itself always fetches
-thumbnails and metadata via ICE.</p>
-<p>See <a href="../web-backend/">WEB Backend</a> for details on the experimental web
-rendering path.</p>
+<h2 id="selection-context-backend">Selection context backend<a class="headerlink" href="#selection-context-backend" title="Permanent link">&para;</a></h2>
+<p><code>SelectedImageContext.backend</code> is retained for compatibility and always
+returns <code>"ICE"</code>.</p>
 
 
 

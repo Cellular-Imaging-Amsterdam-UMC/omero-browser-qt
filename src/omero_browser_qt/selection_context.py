@@ -34,7 +34,8 @@ class SelectedImageContext:
     path_labels : tuple[str, ...]
         Ordered labels from group down to image for breadcrumb display.
     backend : str
-        ``"ICE"`` or ``"WEB"`` — the backend selected by the user.
+        Rendering backend identifier. Retained for compatibility and
+        always ``"ICE"``.
     """
 
     image: Any
@@ -54,4 +55,3 @@ class SelectedImageContext:
     @property
     def breadcrumb(self) -> str:
         return " / ".join(part for part in self.path_labels if part)
-

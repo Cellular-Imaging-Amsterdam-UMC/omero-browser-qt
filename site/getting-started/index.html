@@ -427,10 +427,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ice-vs-web-backends" class="md-nav__link">
+  <a href="#omero-viewer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ICE vs WEB backends
+        OMERO Viewer
       
     </span>
   </a>
@@ -553,34 +553,6 @@
     
   
     Pixel Loading
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../user-guide/web-backend/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    WEB Backend
   
 
     
@@ -886,34 +858,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/webclient/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Web Client
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../api/selection_context/" class="md-nav__link">
         
   
@@ -1171,14 +1115,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../examples/demo-viewer/" class="md-nav__link">
+      <a href="../examples/omero-viewer/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Demo Viewer
+    OMERO Viewer
   
 
     
@@ -1358,10 +1302,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#ice-vs-web-backends" class="md-nav__link">
+  <a href="#omero-viewer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ICE vs WEB backends
+        OMERO Viewer
       
     </span>
   </a>
@@ -1448,8 +1392,8 @@ from <a href="https://www.glencoesoftware.com/blog/2023/12/08/ice-binaries-for-o
 </thead>
 <tbody>
 <tr>
-<td><code>viewer3d</code></td>
-<td><code>pip install "omero-browser-qt[viewer3d]"</code></td>
+<td><code>viewer</code></td>
+<td><code>pip install "omero-browser-qt[viewer]"</code></td>
 <td>vispy + PyOpenGL for 3D volume rendering</td>
 </tr>
 <tr>
@@ -1478,45 +1422,17 @@ from <a href="https://www.glencoesoftware.com/blog/2023/12/08/ice-binaries-for-o
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">breadcrumb</span><span class="p">)</span>          <span class="c1"># e.g. &quot;Project &gt; Dataset &gt; image.tiff&quot;</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="nb">print</span><span class="p">(</span><span class="n">ctx</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">getId</span><span class="p">())</span>
 </code></pre></div>
-<h2 id="ice-vs-web-backends">ICE vs WEB backends<a class="headerlink" href="#ice-vs-web-backends" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th></th>
-<th>ICE (default)</th>
-<th>WEB</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Transport</strong></td>
-<td>OMERO.blitz (Ice RPC)</td>
-<td>OMERO.web REST API</td>
-</tr>
-<tr>
-<td><strong>Pixel data</strong></td>
-<td>Raw stored values</td>
-<td>Server-rendered RGB</td>
-</tr>
-<tr>
-<td><strong>Large images</strong></td>
-<td>Tile-based dask arrays</td>
-<td>Not supported (falls back to ICE)</td>
-</tr>
-<tr>
-<td><strong>Projections</strong></td>
-<td>Client-side (Slice, MIP, SUM, …)</td>
-<td>Server-side (Slice, MIP, Mean)</td>
-</tr>
-<tr>
-<td><strong>Use case</strong></td>
-<td>Quantitative analysis</td>
-<td>Quick preview / lightweight clients</td>
-</tr>
-</tbody>
-</table>
-<p>Choose the backend at runtime via the <strong>ICE / WEB</strong> selector in the browser
-dialog, or programmatically via <code>VIEW_BACKEND_ICE</code> / <code>VIEW_BACKEND_WEB</code>.</p>
+<h2 id="omero-viewer">OMERO Viewer<a class="headerlink" href="#omero-viewer" title="Permanent link">&para;</a></h2>
+<p>The package installs an <code>omero_viewer</code> launcher by default. Install the
+<code>viewer</code> extra as well if you want 3D support:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;omero-browser-qt[viewer]&quot;</span>
+</code></pre></div>
+<p>Then launch the viewer with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>omero_viewer
+</code></pre></div>
+<p>On Windows, pip installs this as a small <code>omero_viewer.exe</code> launcher in the
+active environment. From a source checkout, you can also run
+<code>python -m omero_browser_qt.omero_viewer</code>.</p>
 <h2 id="next-steps">Next steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../user-guide/browser-dialog/">Browser Dialog guide</a> — learn the full UI</li>

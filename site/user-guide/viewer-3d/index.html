@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/user-guide/viewer-3d/">
       
       
-        <link rel="prev" href="../web-backend/">
+        <link rel="prev" href="../pixel-loading/">
       
       
         <link rel="next" href="../display-settings/">
@@ -406,34 +406,6 @@
     
   
     Pixel Loading
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../web-backend/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    WEB Backend
   
 
     
@@ -852,34 +824,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/webclient/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Web Client
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../api/selection_context/" class="md-nav__link">
         
   
@@ -1137,14 +1081,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../examples/demo-viewer/" class="md-nav__link">
+      <a href="../../examples/omero-viewer/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Demo Viewer
+    OMERO Viewer
   
 
     
@@ -1332,11 +1276,11 @@
 
 
 <h1 id="3d-volume-viewer">3D Volume Viewer<a class="headerlink" href="#3d-volume-viewer" title="Permanent link">&para;</a></h1>
-<p>The demo viewer includes an optional GPU-accelerated 3D volume renderer
+<p>The OMERO Viewer includes an optional GPU-accelerated 3D volume renderer
 powered by <a href="https://vispy.org/">vispy</a>.</p>
 <h2 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">&para;</a></h2>
-<p>Install the <code>viewer3d</code> extra:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;omero-browser-qt[viewer3d]&quot;</span>
+<p>Install the <code>viewer</code> extra:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;omero-browser-qt[viewer]&quot;</span>
 </code></pre></div>
 <p>This adds <code>vispy</code> and <code>PyOpenGL</code>.</p>
 <h2 id="render-modes">Render modes<a class="headerlink" href="#render-modes" title="Permanent link">&para;</a></h2>
@@ -1414,9 +1358,9 @@ its OMERO display colour as a custom vispy colormap.</p>
 <li>Only active channels are rendered</li>
 </ul>
 <h2 id="embedding-in-your-own-application">Embedding in your own application<a class="headerlink" href="#embedding-in-your-own-application" title="Permanent link">&para;</a></h2>
-<p>The 3D viewer in the demo uses vispy's <code>SceneCanvas</code> embedded as a
+<p>The 3D viewer in the OMERO Viewer uses vispy's <code>SceneCanvas</code> embedded as a
 <code>QWidget</code> inside a <code>QStackedWidget</code>. See
-<a href="https://github.com/Cellular-Imaging-Amsterdam-UMC/omero-browser-qt/blob/main/examples/viewer_demo.py">examples/viewer_demo.py</a>
+<a href="https://github.com/Cellular-Imaging-Amsterdam-UMC/omero-browser-qt/blob/main/src/omero_browser_qt/omero_viewer.py">src/omero_browser_qt/omero_viewer.py</a>
 for the full implementation.</p>
 
 

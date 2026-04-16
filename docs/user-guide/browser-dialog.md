@@ -11,7 +11,7 @@ projects, datasets, and images on an OMERO server.
 
 The dialog is divided into:
 
-- **Header bar** — shows the connected server, username, and backend selector (ICE / WEB)
+- **Header bar** — shows the connected server and username
 - **Left panel** — group/owner filter combos, a lazy-loading project → dataset → image tree, and a name filter
 - **Right panel** — 256 × 256 thumbnail preview and an attribute table (dimensions, pixel sizes, acquisition date, …)
 - **Footer** — *Import* button to confirm the selection
@@ -58,11 +58,7 @@ All selected images are returned by `get_selected_images()`.
 Type in the **Filter** field at the bottom of the tree panel to filter
 images by name. The filter applies to the currently expanded datasets.
 
-## Backend selector
+## Selection context backend
 
-The **ICE / WEB** toggle in the header bar controls which rendering
-backend the demo viewer uses. The browser dialog itself always fetches
-thumbnails and metadata via ICE.
-
-See [WEB Backend](web-backend.md) for details on the experimental web
-rendering path.
+`SelectedImageContext.backend` is retained for compatibility and always
+returns `"ICE"`.

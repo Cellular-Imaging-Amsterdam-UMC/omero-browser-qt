@@ -13,8 +13,7 @@
   project → dataset → image tree, thumbnail preview, attribute table, and name filter
 - **ICE pixel loading** — full 5-D array fetch or tile-based dask lazy loading
   for large / pyramidal images
-- **WEB rendering backend** — experimental OMERO.web rendered viewing
-  (Slice, MIP, Mean projections)
+- **OMERO viewer** — installable multi-channel viewer with optional 3D rendering
 - **3D volume viewer** — GPU-accelerated volume rendering (MIP, translucent,
   isosurface, additive) via [vispy](https://vispy.org/)
 - **Embeddable** — designed to drop into any PyQt6 application
@@ -51,4 +50,4 @@ pip install omero-browser-qt
 | [Getting Started](getting-started.md) | Prerequisites, install, first workflow |
 | [User Guide](user-guide/browser-dialog.md) | In-depth usage of every component |
 | [API Reference](api/index.md) | Auto-generated from docstrings |
-| [Examples](examples/index.md) | Recipes and the demo viewer |
+| [Examples](examples/index.md) | Recipes and the OMERO Viewer |

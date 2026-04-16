@@ -16,7 +16,7 @@
         <link rel="prev" href="../structured-selection/">
       
       
-        <link rel="next" href="../demo-viewer/">
+        <link rel="next" href="../omero-viewer/">
       
       
         
@@ -426,34 +426,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../user-guide/web-backend/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    WEB Backend
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../user-guide/viewer-3d/" class="md-nav__link">
         
   
@@ -719,34 +691,6 @@
     
   
     View Backends
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../api/webclient/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Web Client
   
 
     
@@ -1099,17 +1043,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#combine-with-web-rendering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Combine with WEB rendering
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1126,14 +1059,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../demo-viewer/" class="md-nav__link">
+      <a href="../omero-viewer/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Demo Viewer
+    OMERO Viewer
   
 
     
@@ -1278,17 +1211,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#combine-with-web-rendering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Combine with WEB rendering
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1352,14 +1274,6 @@
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span>
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="k">if</span> <span class="n">spec</span><span class="p">:</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Draw </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">screen_pixels</span><span class="si">}</span><span class="s2">px bar labelled &#39;</span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">&#39;&quot;</span><span class="p">)</span>
-</code></pre></div>
-<h2 id="combine-with-web-rendering">Combine with WEB rendering<a class="headerlink" href="#combine-with-web-rendering" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">WebRenderedImageBackend</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">backend</span> <span class="o">=</span> <span class="n">WebRenderedImageBackend</span><span class="p">(</span><span class="n">image_wrapper</span><span class="p">,</span> <span class="n">gateway</span><span class="p">)</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">pixmap</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">render_pixmap</span><span class="p">(</span><span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;MIP&quot;</span><span class="p">,</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>                               <span class="n">channels</span><span class="o">=</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;channels&quot;</span><span class="p">])</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="c1"># pixmap is a QPixmap ready for display</span>
 </code></pre></div>
 
 

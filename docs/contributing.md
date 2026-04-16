@@ -11,7 +11,7 @@ cd omero-browser-qt
 
 # Install ZeroC ICE + omero-py (see Getting Started)
 # Then install in editable mode with all extras
-pip install -e ".[viewer3d,docs]"
+pip install -e ".[viewer,docs]"
 ```
 
 ## Code style

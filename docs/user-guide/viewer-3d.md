@@ -1,14 +1,14 @@
 # 3D Volume Viewer
 
-The demo viewer includes an optional GPU-accelerated 3D volume renderer
+The OMERO Viewer includes an optional GPU-accelerated 3D volume renderer
 powered by [vispy](https://vispy.org/).
 
 ## Requirements
 
-Install the `viewer3d` extra:
+Install the `viewer` extra:
 
 ```bash
-pip install "omero-browser-qt[viewer3d]"
+pip install "omero-browser-qt[viewer]"
 ```
 
 This adds `vispy` and `PyOpenGL`.
@@ -52,7 +52,7 @@ its OMERO display colour as a custom vispy colormap.
 
 ## Embedding in your own application
 
-The 3D viewer in the demo uses vispy's `SceneCanvas` embedded as a
+The 3D viewer in the OMERO Viewer uses vispy's `SceneCanvas` embedded as a
 `QWidget` inside a `QStackedWidget`. See
-[examples/viewer_demo.py](https://github.com/Cellular-Imaging-Amsterdam-UMC/omero-browser-qt/blob/main/examples/viewer_demo.py)
+[src/omero_browser_qt/omero_viewer.py](https://github.com/Cellular-Imaging-Amsterdam-UMC/omero-browser-qt/blob/main/src/omero_browser_qt/omero_viewer.py)
 for the full implementation.

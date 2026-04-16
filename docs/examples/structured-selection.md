@@ -31,7 +31,7 @@ Each `SelectedImageContext` carries:
 | `project_id` | `int \| None` | Grandparent project ID |
 | `project_name` | `str \| None` | Grandparent project name |
 | `breadcrumb` | `str` | Human-readable path, e.g. `"Project > Dataset > image.tiff"` |
-| `backend` | `str` | `"ICE"` or `"WEB"` |
+| `backend` | `str` | Always `"ICE"` (retained for compatibility) |
 
 ## When to use this
 

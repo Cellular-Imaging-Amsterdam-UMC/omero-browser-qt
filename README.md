@@ -16,7 +16,7 @@ Reusable PyQt6 dialog for browsing and retrieving images from [OMERO](https://ww
 - **Login dialog** with server-name history (credentials never stored)
 - **QuPath-style browser** — group/owner filters, lazy-loading tree, thumbnail preview, attribute table, name filter
 - **ICE pixel loading** — full 5-D arrays or tile-based dask lazy loading for large / pyramidal images
-- **WEB backend** — experimental OMERO.web rendered viewing (Slice, MIP, Mean)
+- **OMERO viewer** — installable multi-channel viewer with optional 3D rendering
 - **3D volume viewer** — GPU-accelerated rendering (MIP, Translucent, Isosurface, Additive) via vispy
 - Embeddable in any PyQt6 application
 
@@ -40,7 +40,15 @@ See the [Getting Started guide](https://cellular-imaging-amsterdam-umc.github.io
 pip install omero-browser-qt
 ```
 
-Optional extras: `pip install "omero-browser-qt[viewer3d]"` for 3D volume rendering.
+This installs the reusable browser/dialog package and the `omero_viewer`
+launcher. On Windows, pip creates `omero_viewer.exe` in the environment's
+`Scripts` directory.
+
+For full 3D viewer support:
+
+```bash
+pip install "omero-browser-qt[viewer]"
+```
 
 ## Quick start
 
@@ -64,26 +72,32 @@ for ctx in OmeroBrowserDialog.select_image_contexts():
     print(ctx.breadcrumb, ctx.image.getId())
 ```
 
-## Demo viewer
+## OMERO Viewer
 
 ```bash
-python examples/viewer_demo.py
+omero_viewer
 ```
 
 <p align="center">
-  <img src="images/viewer_image_open.png" alt="Demo viewer" width="700">
+  <img src="images/viewer_image_open.png" alt="OMERO Viewer" width="700">
 </p>
 
-See the [Demo Viewer guide](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/examples/demo-viewer/) for controls and features.
+From a source checkout, you can also run:
+
+```bash
+python -m omero_browser_qt.omero_viewer
+```
+
+See the [OMERO Viewer guide](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/examples/omero-viewer/) for controls and features.
 
 ## Documentation
 
 Full documentation: **<https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/>**
 
 - [Getting Started](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/getting-started/) — prerequisites, install, first workflow
-- [User Guide](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/user-guide/browser-dialog/) — browser, pixel loading, WEB backend, 3D viewer
+- [User Guide](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/user-guide/browser-dialog/) — browser, pixel loading, 3D viewer
 - [API Reference](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/api/) — auto-generated from docstrings
-- [Examples](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/examples/) — recipes and demo viewer
+- [Examples](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/examples/) — recipes and the OMERO Viewer
 
 ## License
 

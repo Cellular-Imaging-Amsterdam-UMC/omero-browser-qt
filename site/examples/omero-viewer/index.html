@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/api/webclient/">
+        <link rel="canonical" href="https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/examples/omero-viewer/">
       
       
-        <link rel="prev" href="../view_backends/">
+        <link rel="prev" href="../pixel-loading/">
       
       
-        <link rel="next" href="../selection_context/">
+        <link rel="next" href="../../changelog/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Web Client - omero-browser-qt</title>
+        <title>OMERO Viewer - omero-browser-qt</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#web-client" class="md-skip">
+        <a href="#omero-viewer" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Web Client
+              OMERO Viewer
             
           </span>
         </div>
@@ -426,34 +426,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../user-guide/web-backend/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    WEB Backend
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../user-guide/viewer-3d/" class="md-nav__link">
         
   
@@ -514,8 +486,6 @@
       
   
   
-    
-  
   
   
     
@@ -528,11 +498,13 @@
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
         
           
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
@@ -553,12 +525,325 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
   
     API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/browser_dialog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OmeroBrowserDialog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/gateway/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    OmeroGateway
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/image_loader/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Image Loading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/view_backends/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    View Backends
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/selection_context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Selection Context
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/tree_model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tree Model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/scale_bar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scale Bar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Examples
   
 
           </label>
@@ -599,14 +884,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../browser_dialog/" class="md-nav__link">
+      <a href="../simple-selection/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    OmeroBrowserDialog
+    Simple Selection
   
 
     
@@ -627,14 +912,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../gateway/" class="md-nav__link">
+      <a href="../structured-selection/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    OmeroGateway
+    Structured Selection
   
 
     
@@ -655,70 +940,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../image_loader/" class="md-nav__link">
+      <a href="../pixel-loading/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Image Loading
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../rendering/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Rendering
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../view_backends/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    View Backends
+    Pixel Loading
   
 
     
@@ -755,7 +984,7 @@
   <span class="md-ellipsis">
     
   
-    Web Client
+    OMERO Viewer
   
 
     
@@ -773,7 +1002,7 @@
   <span class="md-ellipsis">
     
   
-    Web Client
+    OMERO Viewer
   
 
     
@@ -799,22 +1028,33 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#omero_browser_qt.webclient.OmeroWebClient" class="md-nav__link">
+  <a href="#running" class="md-nav__link">
     <span class="md-ellipsis">
       
-        OmeroWebClient
+        Running
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="OmeroWebClient">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Features">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#omero_browser_qt.webclient.OmeroWebClient.ensure_logged_in" class="md-nav__link">
+  <a href="#2d-viewer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ensure_logged_in
+        2D viewer
       
     </span>
   </a>
@@ -822,21 +1062,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#omero_browser_qt.webclient.OmeroWebClient.get_img_data" class="md-nav__link">
+  <a href="#3d-viewer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        get_img_data
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#omero_browser_qt.webclient.OmeroWebClient.render_image" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        render_image
+        3D viewer
       
     </span>
   </a>
@@ -848,295 +1077,21 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../selection_context/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Selection Context
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../tree_model/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Tree Model
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../scale_bar/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Scale Bar
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    
-    
-    
-    
-      
-        
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
-      
-        
-        
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
-        
-          
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
-            
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Examples
-  
-
-    
-  </span>
-  
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
-            <span class="md-nav__icon md-icon"></span>
-            
-  
-    Examples
-  
-
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../examples/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Overview
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../examples/simple-selection/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Simple Selection
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../examples/structured-selection/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Structured Selection
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../examples/pixel-loading/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Pixel Loading
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../examples/demo-viewer/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Demo Viewer
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -1230,22 +1185,33 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#omero_browser_qt.webclient.OmeroWebClient" class="md-nav__link">
+  <a href="#running" class="md-nav__link">
     <span class="md-ellipsis">
       
-        OmeroWebClient
+        Running
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="OmeroWebClient">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Features">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#omero_browser_qt.webclient.OmeroWebClient.ensure_logged_in" class="md-nav__link">
+  <a href="#2d-viewer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        ensure_logged_in
+        2D viewer
       
     </span>
   </a>
@@ -1253,21 +1219,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#omero_browser_qt.webclient.OmeroWebClient.get_img_data" class="md-nav__link">
+  <a href="#3d-viewer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        get_img_data
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#omero_browser_qt.webclient.OmeroWebClient.render_image" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        render_image
+        3D viewer
       
     </span>
   </a>
@@ -1276,6 +1231,17 @@
         
       </ul>
     </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#architecture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Architecture
+      
+    </span>
+  </a>
   
 </li>
       
@@ -1299,378 +1265,60 @@
   
 
 
-<h1 id="web-client">Web Client<a class="headerlink" href="#web-client" title="Permanent link">&para;</a></h1>
+<h1 id="omero-viewer">OMERO Viewer<a class="headerlink" href="#omero-viewer" title="Permanent link">&para;</a></h1>
+<p>A full-featured multi-channel image viewer is included at
+<a href="https://github.com/Cellular-Imaging-Amsterdam-UMC/omero-browser-qt/blob/main/src/omero_browser_qt/omero_viewer.py"><code>src/omero_browser_qt/omero_viewer.py</code></a>.</p>
+<p align="center">
+  <img src="../images/viewer_and_login.png" alt="Viewer with login dialog" width="700">
+</p>
 
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="omero_browser_qt.webclient.OmeroWebClient" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">OmeroWebClient</span>
-
-
-<a href="#omero_browser_qt.webclient.OmeroWebClient" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">OmeroWebClient</span><span class="p">(</span><span class="n">gateway</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">base_url</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">server_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span>
+<h2 id="running">Running<a class="headerlink" href="#running" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>omero_viewer
 </code></pre></div>
-
-    <div class="doc doc-contents first">
-
-
-
-        <p>HTTP client for OMERO.web JSON/WebGateway endpoints.</p>
-
-        <p>Create a web client for the given gateway.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>gateway</code>
-            </td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" title="OmeroGateway (omero_browser_qt.gateway.OmeroGateway)" href="../gateway/#omero_browser_qt.gateway.OmeroGateway">OmeroGateway</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Connected gateway instance (used for host URL and credentials).</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>base_url</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Override the OMERO.web base URL.  Defaults to the gateway's
-:attr:<code>~OmeroGateway.web_base_url</code>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>server_id</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>OMERO server id used in the web login request (default <code>1</code>).</p>
-              </div>
-            </td>
-            <td>
-                  <code>1</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="omero_browser_qt.webclient.OmeroWebClient.ensure_logged_in" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">ensure_logged_in</span>
-
-
-<a href="#omero_browser_qt.webclient.OmeroWebClient.ensure_logged_in" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">ensure_logged_in</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+<p>From a source checkout, you can also run:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>python<span class="w"> </span>-m<span class="w"> </span>omero_browser_qt.omero_viewer
 </code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Authenticate with OMERO.web if not already logged in.</p>
-<p>Obtains a CSRF token, posts credentials, and stores the session
-cookie for subsequent requests.</p>
-
-
-<p><span class="doc-section-title">Raises:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="RuntimeError">RuntimeError</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>If credentials are missing or the login request fails.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="omero_browser_qt.webclient.OmeroWebClient.get_img_data" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">get_img_data</span>
-
-
-<a href="#omero_browser_qt.webclient.OmeroWebClient.get_img_data" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">get_img_data</span><span class="p">(</span><span class="n">image_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span>
+<p>For 3D volume rendering, install the optional extra first:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;omero-browser-qt[viewer]&quot;</span>
 </code></pre></div>
+<h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
+<p align="center">
+  <img src="../images/viewer_image_open.png" alt="Viewer with image open" width="700">
+</p>
 
-    <div class="doc doc-contents ">
-
-        <p>Fetch image metadata from the WebGateway <code>imgData</code> endpoint.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>image_id</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>OMERO image id.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="dict">dict</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Parsed JSON with keys <code>rdefs</code>, <code>channels</code>, <code>size</code>, etc.</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="omero_browser_qt.webclient.OmeroWebClient.render_image" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">render_image</span>
-
-
-<a href="#omero_browser_qt.webclient.OmeroWebClient.render_image" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">render_image</span><span class="p">(</span><span class="n">image_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">z</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">channel_spec</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">projection</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span>
-</code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Download a server-rendered image as raw JPEG/PNG bytes.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>image_id</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>OMERO image id.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>z</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Z-plane index (omitted for projections).</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>t</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Timepoint index (omitted for projections).</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>channel_spec</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>OMERO channel rendering string, e.g. <code>"1|0:255$FF0000,2|0:255$00FF00"</code>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>projection</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span> | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Projection type: <code>"normal"</code>, <code>"intmax"</code>, or <code>"intmean"</code>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="bytes">bytes</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Raw image data (typically JPEG).</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    </div>
-
-</div>
-
-
-
-  </div>
-
-    </div>
-
-</div>
+<h3 id="2d-viewer">2D viewer<a class="headerlink" href="#2d-viewer" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Open from OMERO</strong> — launches the login + browser dialogs</li>
+<li><strong>Projection modes</strong> — Slice, MIP, SUM, Mean, Median, Extended Focus, Local Contrast</li>
+<li><strong>Z slider</strong> — navigate slices (enabled in Slice mode)</li>
+<li><strong>Timepoint slider</strong> — navigate T dimension</li>
+<li><strong>Lo% / Hi%</strong> — percentile-based contrast adjustment</li>
+<li><strong>Channel buttons</strong> — toggle individual channels, coloured to match OMERO metadata</li>
+<li><strong>Scale bar</strong> — automatic overlay when physical pixel size is available</li>
+<li><strong>Cursor readout</strong> — live X / Y / Z / T in the status bar</li>
+<li><strong>Fit to View</strong> — reset zoom and fit content to the window</li>
+<li><strong>Mouse</strong> — scroll to zoom, drag to pan</li>
+<li><strong>Play/Pause</strong> — animate through Z-slices or timepoints</li>
+</ul>
+<h3 id="3d-viewer">3D viewer<a class="headerlink" href="#3d-viewer" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Render modes</strong> — MIP, Translucent, Isosurface, Additive</li>
+<li><strong>Gain slider</strong> — brightness, context-aware defaults per render mode</li>
+<li><strong>Threshold slider</strong> — isosurface cutoff (Isosurface mode only)</li>
+<li><strong>Multi-channel</strong> — additive blending with OMERO channel colours</li>
+<li><strong>Progress bar</strong> — shown while loading Z-stacks</li>
+<li><strong>Cached stacks</strong> — contrast adjustments don't re-fetch data</li>
+</ul>
+<h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
+<p>The viewer demonstrates:</p>
+<ul>
+<li><code>OmeroBrowserDialog.select_image_contexts()</code> for structured selection</li>
+<li><code>RegularImagePlaneProvider</code> for on-demand plane fetching</li>
+<li><code>PyramidTileProvider</code> for large / pyramidal images</li>
+<li><code>get_image_display_settings()</code> for channel metadata</li>
+<li><code>compute_scale_bar()</code> for physical scale overlay</li>
+<li>vispy <code>SceneCanvas</code> embedded via <code>QStackedWidget</code> for 3D</li>
+</ul>
 
 
 

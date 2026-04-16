@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- 3D volume viewer (MIP, Translucent, Isosurface, Additive) via vispy — optional `viewer3d` extra
+- 3D volume viewer (MIP, Translucent, Isosurface, Additive) via vispy — optional `viewer` extra
 - Play/pause animation with speed control
-- WEB backend for OMERO.web rendered viewing (Slice, MIP, Mean)
-- Backend selector (ICE / WEB) in browser dialog
+- OMERO viewer rendering path for interactive image viewing
+- Rendering metadata in `SelectedImageContext`
 - `SelectedImageContext` for structured selection with breadcrumbs
 - `compute_scale_bar()` helper for image viewers
 - `get_image_display_settings()` for normalized channel display metadata

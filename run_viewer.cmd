@@ -3,7 +3,7 @@ setlocal
 set PYTHONPATH=%~dp0src
 
 if defined CONDA_EXE (
-    "%CONDA_EXE%" run -n deconvolve python "%~dp0examples\viewer_demo.py" %*
+    "%CONDA_EXE%" run -n deconvolve python -m omero_browser_qt.omero_viewer %*
 ) else (
-    conda run -n deconvolve python "%~dp0examples\viewer_demo.py" %*
+    conda run -n deconvolve python -m omero_browser_qt.omero_viewer %*
 )

@@ -52,7 +52,7 @@ pip install omero-browser-qt
 
 | Extra | Install command | Adds |
 |-------|----------------|------|
-| `viewer3d` | `pip install "omero-browser-qt[viewer3d]"` | vispy + PyOpenGL for 3D volume rendering |
+| `viewer` | `pip install "omero-browser-qt[viewer]"` | vispy + PyOpenGL for 3D volume rendering |
 | `docs` | `pip install "omero-browser-qt[docs]"` | MkDocs toolchain (maintainers only) |
 
 ## First workflow
@@ -81,18 +81,24 @@ for ctx in OmeroBrowserDialog.select_image_contexts():
     print(ctx.image.getId())
 ```
 
-## ICE vs WEB backends
+## OMERO Viewer
 
-| | ICE (default) | WEB |
-|---|---|---|
-| **Transport** | OMERO.blitz (Ice RPC) | OMERO.web REST API |
-| **Pixel data** | Raw stored values | Server-rendered RGB |
-| **Large images** | Tile-based dask arrays | Not supported (falls back to ICE) |
-| **Projections** | Client-side (Slice, MIP, SUM, …) | Server-side (Slice, MIP, Mean) |
-| **Use case** | Quantitative analysis | Quick preview / lightweight clients |
+The package installs an `omero_viewer` launcher by default. Install the
+`viewer` extra as well if you want 3D support:
 
-Choose the backend at runtime via the **ICE / WEB** selector in the browser
-dialog, or programmatically via `VIEW_BACKEND_ICE` / `VIEW_BACKEND_WEB`.
+```bash
+pip install "omero-browser-qt[viewer]"
+```
+
+Then launch the viewer with:
+
+```bash
+omero_viewer
+```
+
+On Windows, pip installs this as a small `omero_viewer.exe` launcher in the
+active environment. From a source checkout, you can also run
+`python -m omero_browser_qt.omero_viewer`.
 
 ## Next steps
 

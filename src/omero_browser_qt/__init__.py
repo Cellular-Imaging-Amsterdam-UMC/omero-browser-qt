@@ -30,8 +30,7 @@ from .rendering import ChannelDisplay, ImageDisplaySettings, get_image_display_s
 from .scale_bar import ScaleBarSpec, compute_scale_bar
 from .selection_context import SelectedImageContext
 from .tree_model import NodeType, OmeroTreeModel
-from .view_backends import VIEW_BACKEND_ICE, VIEW_BACKEND_WEB, WebRenderedImageBackend
-from .webclient import OmeroWebClient
+from .view_backends import VIEW_BACKEND_ICE
 
 __all__ = [
     "LoginDialog",
@@ -46,9 +45,6 @@ __all__ = [
     "ScaleBarSpec",
     "SelectedImageContext",
     "VIEW_BACKEND_ICE",
-    "VIEW_BACKEND_WEB",
-    "WebRenderedImageBackend",
-    "OmeroWebClient",
     "compute_scale_bar",
     "get_image_display_settings",
     "get_image_metadata",
@@ -58,4 +54,4 @@ __all__ = [
     "raw_pixels_store",
 ]
 
-__version__ = "0.1.5"
+__version__ = "0.2.0"

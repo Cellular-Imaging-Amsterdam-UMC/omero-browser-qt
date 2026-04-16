@@ -10,8 +10,7 @@ Auto-generated documentation from source docstrings.
 | [`OmeroGateway`](gateway.md) | Singleton ICE gateway wrapper |
 | [`Image Loading`](image_loader.md) | Pixel retrieval (planes, stacks, tiles, dask) |
 | [`Rendering`](rendering.md) | Channel display settings and display helpers |
-| [`View Backends`](view_backends.md) | ICE / WEB rendering backends |
-| [`Web Client`](webclient.md) | OMERO.web REST client |
+| [`View Backends`](view_backends.md) | Backend identifiers |
 | [`Selection Context`](selection_context.md) | Structured selection result |
 | [`Tree Model`](tree_model.md) | Qt tree model for OMERO hierarchy |
 | [`Scale Bar`](scale_bar.md) | Scale bar computation |

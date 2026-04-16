@@ -84,7 +84,6 @@ class OmeroGateway(QObject):
         self._host: str = ""
         self._port: int = 4064
         self._username: str = ""
-        self._password: str = ""
 
     # ------------------------------------------------------------------
     # Connection management
@@ -112,7 +111,6 @@ class OmeroGateway(QObject):
             self._host = host
             self._port = port
             self._username = username
-            self._password = password
             self._save_server(host)
             log.info("Connected to %s as %s", host, username)
             self.connected.emit(host)
@@ -128,7 +126,6 @@ class OmeroGateway(QObject):
             except Exception:  # noqa: BLE001
                 pass
             self._conn = None
-            self._password = ""
             self.disconnected.emit()
 
     def is_connected(self) -> bool:
@@ -154,15 +151,6 @@ class OmeroGateway(QObject):
     @property
     def username(self) -> str:
         return self._username
-
-    @property
-    def web_base_url(self) -> str:
-        if self._host.startswith(("http://", "https://")):
-            return self._host.rstrip("/")
-        return f"https://{self._host}".rstrip("/")
-
-    def web_credentials(self) -> tuple[str, str]:
-        return self._username, self._password
 
     # ------------------------------------------------------------------
     # Group / user helpers

@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """
-viewer_demo.py — Minimal multi-channel image viewer that demonstrates
-the ``omero-browser-qt`` reusable dialog.
-This example shows how to use the library's tile-based rendering API to
+omero_viewer.py — Full-featured multi-channel OMERO viewer.
 """
 
 from __future__ import annotations
@@ -81,8 +79,6 @@ _PROJECTION_MODES = [
     "Extended Focus",
     "Local Contrast",
 ]
-
-_SLOW_PROJECTION_MODES = {"Mean", "Median", "Extended Focus", "Local Contrast"}
 _PROGRESS_Z_STEP = 5
 
 
@@ -245,30 +241,6 @@ def _composite_to_pixmap(
         pix = pix.scaledToWidth(width, Qt.TransformationMode.SmoothTransformation)
     return pix
 
-
-def _preview_stride_for_shape(shape: tuple[int, ...]) -> int:
-    """Choose a simple decimation factor for quick preview rendering."""
-    if len(shape) < 2:
-        return 1
-    h, w = shape[-2], shape[-1]
-    longest = max(h, w)
-    if longest >= 4096:
-        return 8
-    if longest >= 2048:
-        return 4
-    if longest >= 1024:
-        return 2
-    return 1
-
-
-def _downsample_stack_for_preview(stack: np.ndarray) -> np.ndarray:
-    """Return a cheap strided preview of a ``(Z, Y, X)`` stack."""
-    stride = _preview_stride_for_shape(stack.shape)
-    if stride <= 1:
-        return stack
-    return stack[:, ::stride, ::stride]
-
-
 def _neighbor_sum(arr: np.ndarray) -> np.ndarray:
     """Return the 3x3 neighborhood sum using edge padding."""
     pad = np.pad(arr, 1, mode="edge")
@@ -367,70 +339,6 @@ def _projection_step_count(stack: np.ndarray, mode: str) -> int:
     return 1
 
 
-def _project_rgb_stack(stack: np.ndarray, mode: str, z_index: int, progress=None) -> np.ndarray:
-    """Project a (Z, H, W, 3) RGB stack to a single (H, W, 3) plane."""
-    if stack.ndim != 4 or stack.shape[-1] != 3:
-        raise ValueError(f"Expected (Z, H, W, 3) RGB stack, got shape {stack.shape}")
-
-    if mode == "Slice":
-        z = max(0, min(z_index, stack.shape[0] - 1))
-        return stack[z]
-    if mode == "MIP":
-        return stack.max(axis=0)
-    if mode == "SUM":
-        return np.clip(stack.astype(np.float64).sum(axis=0), 0, 255).astype(np.uint8)
-    if mode == "Mean":
-        acc = np.zeros(stack.shape[1:], dtype=np.float64)
-        total = stack.shape[0]
-        for i in range(total):
-            acc += stack[i]
-            if progress is not None and ((i + 1) % _PROGRESS_Z_STEP == 0 or (i + 1) == total):
-                progress(i + 1, total)
-        return (acc / total).astype(np.uint8)
-    if mode == "Median":
-        total = 3
-        if progress is not None:
-            progress(1, total)
-        result = np.median(stack.astype(np.float64), axis=0)
-        if progress is not None:
-            progress(2, total)
-        result = result.astype(np.uint8)
-        if progress is not None:
-            progress(3, total)
-        return result
-    if mode in ("Extended Focus", "Local Contrast"):
-        # Compute sharpness metric on grayscale, then pick from RGB stack
-        grey = np.mean(stack.astype(np.float64), axis=-1)  # (Z, H, W)
-        metric_fn = _laplacian_metric if mode == "Extended Focus" else _local_contrast_metric
-        total = grey.shape[0] + 1
-        measures = []
-        for i in range(grey.shape[0]):
-            measures.append(metric_fn(grey[i]))
-            if progress is not None and ((i + 1) % _PROGRESS_Z_STEP == 0 or (i + 1) == grey.shape[0]):
-                progress(i + 1, total)
-        measures = np.stack(measures, axis=0)
-        best_idx = np.argmax(measures, axis=0)
-        if progress is not None:
-            progress(total, total)
-        # Gather best-focus pixel from each Z for each RGB channel
-        h, w = best_idx.shape
-        result = np.empty((h, w, 3), dtype=stack.dtype)
-        for c in range(3):
-            result[..., c] = np.take_along_axis(
-                stack[..., c], best_idx[np.newaxis, ...], axis=0
-            )[0]
-        return result
-    raise ValueError(f"Unknown projection mode: {mode}")
-
-
-def _rgb_array_to_pixmap(arr: np.ndarray) -> QPixmap:
-    """Convert an (H, W, 3) uint8 RGB array to a QPixmap."""
-    h, w = arr.shape[:2]
-    rgb = np.ascontiguousarray(arr)
-    qimg = QImage(rgb.data, w, h, 3 * w, QImage.Format.Format_RGB888)
-    return QPixmap.fromImage(qimg.copy())
-
-
 # ======================================================================
 # ZoomableImageView
 # ======================================================================
@@ -469,20 +377,25 @@ class ZoomableImageView(QGraphicsView):
         self.viewport().update()
 
     def fit_in_view(self) -> None:
-        self.resetTransform()
-        if not self._pix_item.pixmap().isNull():
+        if self._pix_item.isVisible() and not self._pix_item.pixmap().isNull():
             target = self._pix_item.sceneBoundingRect()
         else:
             target = self._scene.itemsBoundingRect()
             if target.isNull() or target.width() <= 0 or target.height() <= 0:
                 target = self._scene.sceneRect()
+        self.fit_rect(target)
+
+    def fit_rect(self, target: QRectF) -> None:
+        """Fit an explicit scene rect in the view."""
+        self.resetTransform()
         if target.width() > 0 and target.height() > 0:
             self.fitInView(target, Qt.AspectRatioMode.KeepAspectRatio)
             self.centerOn(target.center())
+        self.viewport().update()
 
     def actual_size(self) -> None:
         self.resetTransform()
-        if not self._pix_item.pixmap().isNull():
+        if self._pix_item.isVisible() and not self._pix_item.pixmap().isNull():
             self.centerOn(self._pix_item.sceneBoundingRect().center())
         else:
             target = self._scene.itemsBoundingRect()
@@ -971,7 +884,6 @@ class ViewerWindow(QMainWindow):
         self._view_request_id = 0
         self._rendering = False
         self._pending_render = False
-        self._web_backend = None
 
         # Tiled pyramid mode
         self._tiled_item: TiledImageItem | None = None
@@ -1041,9 +953,6 @@ class ViewerWindow(QMainWindow):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self._backend_label = QLabel("")
-        self._backend_label.setObjectName("hint")
-        actions.addWidget(self._backend_label)
         actions.addWidget(QLabel("Lo"))
         self._lo_spin = QDoubleSpinBox()
         self._lo_spin.setRange(0.0, 50.0)
@@ -1103,7 +1012,7 @@ class ViewerWindow(QMainWindow):
         self._view_stack.addWidget(self._viewer)  # index 0
         if _HAS_VISPY:
             self._vispy_canvas = vispy_scene.SceneCanvas(
-                keys="interactive", show=False, bgcolor="#1e1e1e",
+                keys="interactive", show=False, bgcolor="#000000",
             )
             self._vispy_view = self._vispy_canvas.central_widget.add_view()
             self._vispy_view.camera = vispy_scene.TurntableCamera(
@@ -1224,7 +1133,7 @@ class ViewerWindow(QMainWindow):
         main_lay.addLayout(body_row, 1)
         main_lay.addLayout(bottom_row)
         self._actual_btn.clicked.connect(self._viewer.actual_size)
-        self._fit_btn.clicked.connect(self._viewer.fit_in_view)
+        self._fit_btn.clicked.connect(self._fit_current_view)
 
         # Status bar
         self._status = QStatusBar()
@@ -1352,7 +1261,7 @@ class ViewerWindow(QMainWindow):
 
     def _fit_after_load(self) -> None:
         """Reset zoom and fit newly loaded content after layout settles."""
-        QTimer.singleShot(0, self._viewer.fit_in_view)
+        QTimer.singleShot(0, self._fit_current_view)
 
     # ------------------------------------------------------------------
     # Open from OMERO
@@ -1396,11 +1305,55 @@ class ViewerWindow(QMainWindow):
         self._3d_btn.setText("2D")
         self._status.showMessage("3D volume view — drag to rotate, scroll to zoom")
 
-    def _switch_to_2d(self) -> None:
+    def _switch_to_2d(self, *, show_status: bool = True) -> None:
         self._view_stack.setCurrentIndex(0)
         self._3d_bar.setVisible(False)
         self._3d_btn.setText("3D")
-        self._status.showMessage("2D view")
+        if show_status:
+            self._status.showMessage("2D view")
+
+    def _prepare_for_new_image(self) -> None:
+        """Reset view state so a newly loaded image always opens in 2D."""
+        self._switch_to_2d(show_status=False)
+        self._3d_debounce.stop()
+
+    def _fit_current_view(self) -> None:
+        """Fit the current view, refreshing tiled overviews when needed."""
+        if self._view_stack.currentIndex() == 1:
+            self._reset_vol_camera()
+            return
+
+        if self._tiled_item is not None:
+            mode = self._proj_combo.currentText()
+            z = self._current_z()
+            t = self._current_t()
+            active = [
+                i for i, btn in enumerate(self._channel_buttons)
+                if btn.isChecked()
+            ]
+            request_id = self._view_request_id
+            overview_volumes = self._tiled_overview(mode, z, t, request_id)
+            contrast: dict[int, tuple[float, float]] = {}
+            for c in active:
+                if c < len(overview_volumes):
+                    arr = overview_volumes[c][0]
+                    contrast[c] = self._get_contrast(arr, c)
+
+            overview_pix = self._build_overview_pixmap(active, contrast, overview_volumes)
+            self._tiled_item.set_overview(overview_pix)
+            self._tiled_item.set_display(
+                active,
+                self._channel_colors,
+                contrast,
+                z,
+                t,
+                mode,
+            )
+            self._viewer.fit_rect(self._tiled_item.boundingRect())
+            self._tiled_item.update()
+        else:
+            self._viewer.fit_in_view()
+        self._viewer.viewport().update()
 
     def _load_3d_volumes(self, active: list, nz: int) -> None:
         """Build vispy Volume visuals from active channel stacks."""
@@ -1547,33 +1500,35 @@ class ViewerWindow(QMainWindow):
             self._vispy_canvas.update()
 
     def _open_omero(self):
-        from omero_browser_qt import (
-            OmeroBrowserDialog,
-            OmeroGateway,
-            RegularImagePlaneProvider,
-            VIEW_BACKEND_WEB,
-            WebRenderedImageBackend,
-            is_large_image,
-        )
+        try:
+            from omero_browser_qt import (
+                OmeroBrowserDialog,
+                RegularImagePlaneProvider,
+                is_large_image,
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Import Error",
+                                 f"Failed to load OMERO modules:\n{exc}")
+            return
 
-        contexts = OmeroBrowserDialog.select_image_contexts(self)
+        try:
+            contexts = OmeroBrowserDialog.select_image_contexts(self)
+        except Exception as exc:
+            QMessageBox.critical(self, "OMERO Browser Error",
+                                 f"Failed to open browser dialog:\n{exc}")
+            return
         if not contexts:
             return
 
         context = contexts[0]
         image = context.image
-        backend_choice = context.backend
-        self._status.showMessage(f"Loading {image.getName()} from OMERO ({backend_choice})…")
+        self._status.showMessage(f"Loading {image.getName()} from OMERO…")
         QApplication.processEvents()
 
         try:
-            if backend_choice == VIEW_BACKEND_WEB and not is_large_image(image):
-                self._set_web_backend(WebRenderedImageBackend(image, OmeroGateway()), context=context)
-            elif is_large_image(image):
+            if is_large_image(image):
                 from omero_browser_qt import PyramidTileProvider
 
-                if backend_choice == VIEW_BACKEND_WEB:
-                    self._status.showMessage("WEB backend not yet supported for large images; using ICE")
                 provider = PyramidTileProvider(image)
                 self._set_tiled_data(provider, context=context)
             else:
@@ -1594,6 +1549,7 @@ class ViewerWindow(QMainWindow):
         *,
         context=None,
     ) -> None:
+        self._prepare_for_new_image()
         # Clean up tiled mode if active
         if self._tiled_item is not None:
             self._viewer._scene.removeItem(self._tiled_item)
@@ -1602,7 +1558,6 @@ class ViewerWindow(QMainWindow):
             self._overview_cache.clear()
         self._viewer._pix_item.setVisible(True)
         self._regular_provider = None
-        self._web_backend = None
 
         self._volumes = volumes
         self._metadata = metadata
@@ -1619,13 +1574,17 @@ class ViewerWindow(QMainWindow):
         self._request_view_update()
 
         self._refresh_metadata_labels()
-        self._backend_label.setText("")
         self._3d_btn.setEnabled(_HAS_VISPY and len(self._volumes) > 0)
+        if _HAS_VISPY:
+            self._3d_btn.setToolTip("Open 3D volume viewer")
+        else:
+            self._3d_btn.setToolTip("vispy not installed — pip install vispy")
 
         self._fit_after_load()
 
     def _set_regular_provider(self, provider, *, context=None) -> None:
         """Set up the viewer for on-demand plane loading."""
+        self._prepare_for_new_image()
         if self._tiled_item is not None:
             self._viewer._scene.removeItem(self._tiled_item)
             self._tiled_item = None
@@ -1634,44 +1593,17 @@ class ViewerWindow(QMainWindow):
         self._viewer._pix_item.setVisible(True)
 
         self._regular_provider = provider
-        self._web_backend = None
         self._volumes = []
         self._metadata = provider.metadata
         self._selection_context = context
         self._pct_cache.clear()
         self._viewer.set_scale_bar_um_per_pixel(self._metadata.get("pixel_size_x"))
         self._set_projection_modes(_PROJECTION_MODES)
-        self._backend_label.setText("ICE")
         self._3d_btn.setEnabled(_HAS_VISPY)
-
-        channels = self._display_channels()
-        self._channel_colors = _resolve_channel_colors(channels)
-        self._rebuild_channel_toggles(channels)
-        self._configure_dimension_controls()
-        self._request_view_update()
-        self._refresh_metadata_labels()
-        self._fit_after_load()
-
-    def _set_web_backend(self, backend, *, context=None) -> None:
-        """Set up the viewer for server-rendered OMERO.web viewing."""
-        if self._tiled_item is not None:
-            self._viewer._scene.removeItem(self._tiled_item)
-            self._tiled_item = None
-            self._tile_provider = None
-            self._overview_cache.clear()
-        self._viewer._pix_item.setVisible(True)
-
-        self._web_backend = backend
-        self._regular_provider = None
-        self._volumes = []
-        self._metadata = backend.metadata
-        self._selection_context = context
-        self._pct_cache.clear()
-        self._viewer.set_scale_bar_um_per_pixel(self._metadata.get("pixel_size_x"))
-        self._set_projection_modes(_PROJECTION_MODES)
-        self._backend_label.setText("WEB")
-        self._3d_btn.setEnabled(False)
-        self._3d_btn.setToolTip("3D viewer requires ICE backend")
+        if _HAS_VISPY:
+            self._3d_btn.setToolTip("Open 3D volume viewer")
+        else:
+            self._3d_btn.setToolTip("vispy not installed — pip install vispy")
 
         channels = self._display_channels()
         self._channel_colors = _resolve_channel_colors(channels)
@@ -1683,6 +1615,7 @@ class ViewerWindow(QMainWindow):
 
     def _set_tiled_data(self, provider, *, context=None) -> None:
         """Set up the viewer in tiled pyramid mode."""
+        self._prepare_for_new_image()
         # Clean up previous tiled item
         if self._tiled_item is not None:
             self._viewer._scene.removeItem(self._tiled_item)
@@ -1693,16 +1626,15 @@ class ViewerWindow(QMainWindow):
         self._pct_cache.clear()
         self._overview_cache.clear()
         self._regular_provider = None
-        self._web_backend = None
         self._tile_provider = provider
         self._viewer._pix_item.setVisible(False)
+        self._viewer._pix_item.setPixmap(QPixmap())
 
         meta = provider.metadata
         self._metadata = meta
         self._selection_context = context
         self._viewer.set_scale_bar_um_per_pixel(self._metadata.get("pixel_size_x"))
         self._set_projection_modes(_PROJECTION_MODES)
-        self._backend_label.setText("ICE (tiled)")
         self._3d_btn.setEnabled(False)
         self._3d_btn.setToolTip("3D viewer not available for tiled images")
 
@@ -1875,7 +1807,6 @@ class ViewerWindow(QMainWindow):
         z: int,
         t: int,
         request_id: int,
-        preview_callback=None,
     ) -> list[np.ndarray]:
         key = (mode, z if mode == "Slice" else -1, t)
         if key not in self._overview_cache:
@@ -1895,18 +1826,6 @@ class ViewerWindow(QMainWindow):
                         else:
                             for stack, arr in zip(planes_per_channel, volumes, strict=False):
                                 stack.append(arr[0])
-                        if (
-                            preview_callback is not None
-                            and planes_per_channel is not None
-                            and ((zi + 1) % _PROGRESS_Z_STEP == 0 or (zi + 1) == z_count)
-                        ):
-                            preview = [
-                                _project_stack(np.stack(stack, axis=0), mode, z)[np.newaxis, ...]
-                                for stack in planes_per_channel
-                                if stack
-                            ]
-                            self._ensure_render_current(request_id)
-                            preview_callback(preview, zi + 1, z_count)
                     if planes_per_channel is None:
                         planes_per_channel = []
                     self._ensure_render_current(request_id)
@@ -1986,73 +1905,6 @@ class ViewerWindow(QMainWindow):
         self._rendering = True
         mode = self._proj_combo.currentText()
         try:
-            # ---- WEB rendered mode ------------------------------------
-            if self._web_backend is not None:
-                nz = max(int(self._metadata.get("size_z", 1)), 1)
-                nt = max(int(self._metadata.get("size_t", 1)), 1)
-                z = self._current_z()
-                t = self._current_t()
-                self._z_label.setText(f"{z}/{nz - 1}")
-                self._t_label.setText(f"{t}/{nt - 1}")
-                self._z_slider.setEnabled(nz > 1 and mode == "Slice")
-                self._t_slider.setEnabled(nt > 1)
-                self._proj_combo.setEnabled(nz > 1 or mode == "Slice")
-                self._ensure_render_current(request_id)
-                channels = self._current_channel_render_settings()
-
-                if mode == "Slice":
-                    pix = self._web_backend.render_pixmap(
-                        z=z, t=t, mode="Slice", channels=channels,
-                    )
-                    self._ensure_render_current(request_id)
-                    self._viewer.set_pixmap(pix)
-                    self._status.showMessage("Rendered via OMERO.web (Slice)")
-                else:
-                    use_progress = mode in _SLOW_PROJECTION_MODES
-                    progress_total = nz + (1 if not use_progress else _projection_step_count(
-                        np.empty((nz, 1, 1, 3), dtype=np.uint8), mode
-                    ))
-                    if use_progress:
-                        # loading + projection steps
-                        progress_total = nz + _projection_step_count(
-                            np.empty((nz, 1, 1), dtype=np.uint8), mode
-                        )
-                    self._begin_progress(progress_total, f"Fetching {mode} planes from OMERO.web…")
-                    try:
-                        progress_done = 0
-
-                        def load_progress(step: int, total: int, *, base=0):
-                            self._advance_progress(
-                                base + min(step, total),
-                                f"Fetching rendered planes… {step}/{total}",
-                            )
-                            self._ensure_render_current(request_id)
-
-                        rgb_stack = self._web_backend.get_rendered_stack(
-                            t, channels, progress=load_progress,
-                        )
-                        progress_done = nz
-                        self._ensure_render_current(request_id)
-
-                        if use_progress:
-                            def proj_progress(step: int, total: int, *, base=progress_done):
-                                self._advance_progress(
-                                    base + min(step, total),
-                                    f"Computing {mode} projection… {step}/{total}",
-                                )
-                                self._ensure_render_current(request_id)
-                        else:
-                            proj_progress = None
-
-                        result = _project_rgb_stack(rgb_stack, mode, z, progress=proj_progress)
-                        self._ensure_render_current(request_id)
-                        pix = _rgb_array_to_pixmap(result)
-                        self._viewer.set_pixmap(pix)
-                        self._status.showMessage(f"WEB {mode} projection ({nz} Z-planes)")
-                    finally:
-                        self._end_progress()
-                return
-
             # ---- Tiled pyramid mode ------------------------------------
             if self._tiled_item is not None:
                 nz = self._metadata.get("size_z", 1)
@@ -2071,28 +1923,12 @@ class ViewerWindow(QMainWindow):
                         active.append(i)
 
                 contrast: dict[int, tuple[float, float]] = {}
-                preview_contrast: dict[int, tuple[float, float]] = {}
-
-                def preview_callback(preview_volumes, loaded_z: int, total_z: int) -> None:
-                    self._ensure_render_current(request_id)
-                    preview_contrast.clear()
-                    for c in active:
-                        if c < len(preview_volumes):
-                            arr = preview_volumes[c][0]
-                            preview_contrast[c] = self._get_contrast(arr, c)
-                    preview_pix = self._build_overview_pixmap(active, preview_contrast, preview_volumes)
-                    self._tiled_item.set_overview(preview_pix)
-                    self._status.showMessage(
-                        f"Preview ready… finishing {mode} overview ({loaded_z}/{total_z} Z)"
-                    )
-                    QApplication.processEvents()
 
                 overview_volumes = self._tiled_overview(
                     mode,
                     z,
                     t,
                     request_id,
-                    preview_callback=preview_callback if mode in _SLOW_PROJECTION_MODES else None,
                 )
                 self._ensure_render_current(request_id)
                 for c in active:
@@ -2127,19 +1963,21 @@ class ViewerWindow(QMainWindow):
                 i for i, btn in enumerate(self._channel_buttons[:channel_count])
                 if btn.isChecked()
             ]
-            use_progress = mode in _SLOW_PROJECTION_MODES and len(active_indices) > 0
+            use_progress = mode != "Slice" and len(active_indices) > 0
             channel_stacks: dict[int, np.ndarray] = {}
             progress_total = 0
             if use_progress:
-                for _i in active_indices:
+                for i in active_indices:
                     progress_total += nz
-                    progress_total += 1
-                    progress_total += _projection_step_count(np.empty((nz, 1, 1), dtype=np.uint8), mode)
-            if use_progress:
+                    progress_total += _projection_step_count(
+                        np.empty((nz, 1, 1), dtype=np.uint8),
+                        mode,
+                    )
+            if use_progress and progress_total > 0:
                 self._begin_progress(progress_total, f"Loading {mode} data…")
             try:
                 progress_done = 0
-                if use_progress and mode != "Slice":
+                if use_progress:
                     for done, i in enumerate(active_indices, start=1):
                         self._ensure_render_current(request_id)
                         load_steps = nz
@@ -2157,24 +1995,9 @@ class ViewerWindow(QMainWindow):
                         progress_done += load_steps
                         self._advance_progress(
                             progress_done,
-                            f"Preparing {mode} preview…",
+                            f"Loaded {mode} data… channel {done}/{len(active_indices)}",
                         )
                         self._ensure_render_current(request_id)
-
-                    preview_slices = []
-                    for i in active_indices:
-                        self._ensure_render_current(request_id)
-                        preview_stack = _downsample_stack_for_preview(channel_stacks[i])
-                        preview_arr = _project_stack(preview_stack, mode, min(self._current_z(), preview_stack.shape[0] - 1))
-                        color = self._channel_colors[i] if i < len(self._channel_colors) else (255, 255, 255)
-                        lo, hi = self._get_contrast(preview_arr, i)
-                        preview_slices.append((preview_arr, color, (lo, hi)))
-                    progress_done += len(active_indices)
-                    if preview_slices:
-                        self._viewer.set_pixmap(_composite_to_pixmap(preview_slices))
-                        self._status.showMessage(f"Preview ready… finishing {mode} projection")
-                        QApplication.processEvents()
-                    self._ensure_render_current(request_id)
 
                 for done, i in enumerate(active_indices, start=1):
                     self._ensure_render_current(request_id)
@@ -2254,6 +2077,17 @@ if _HAS_VISPY:
 # ======================================================================
 
 def main():
+    # Install global exception hook so PyQt6 slots don't silently kill the app
+    def _excepthook(etype, value, tb):
+        import traceback
+        msg = "".join(traceback.format_exception(etype, value, tb))
+        print(msg, file=sys.stderr, flush=True)
+        try:
+            QMessageBox.critical(None, "Unhandled Error", msg[:2000])
+        except Exception:
+            pass
+    sys.excepthook = _excepthook
+
     app = QApplication(sys.argv)
     app.setApplicationName("OMERO Viewer")
     win = ViewerWindow()

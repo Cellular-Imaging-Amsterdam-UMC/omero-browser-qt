@@ -55,13 +55,3 @@ if spec:
     print(f"Draw {spec.screen_pixels}px bar labelled '{spec.label}'")
 ```
 
-## Combine with WEB rendering
-
-```python
-from omero_browser_qt import WebRenderedImageBackend
-
-backend = WebRenderedImageBackend(image_wrapper, gateway)
-pixmap = backend.render_pixmap(z=0, t=0, mode="MIP",
-                               channels=meta["channels"])
-# pixmap is a QPixmap ready for display
-```

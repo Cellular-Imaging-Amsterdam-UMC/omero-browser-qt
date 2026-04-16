@@ -4,7 +4,7 @@ OmeroBrowserDialog — QuPath-style resizable dialog for browsing OMERO.
 Layout (mirrors the QuPath screenshot):
 
     ┌─────────────────────────────────────────────────┐
-    │  Server: host    Username: user   [ICE ●]       │
+    │  Server: host    Username: user                 │
     ├─────────────────┬───────────────────────────────┤
     │ Group ▼  Owner ▼│                               │
     │                 │  ┌────────────────────┐       │
@@ -53,7 +53,6 @@ log = logging.getLogger(__name__)
 _SETTINGS_GROUP_KEY = "omero_browser_qt/last_group_id"
 _SETTINGS_OWNER_KEY = "omero_browser_qt/last_owner_id"
 _SETTINGS_PATH_KEY = "omero_browser_qt/last_tree_path"
-_SETTINGS_BACKEND_KEY = "omero_browser_qt/last_backend"
 
 
 # ------------------------------------------------------------------
@@ -172,15 +171,6 @@ class OmeroBrowserDialog(QDialog):
         top.addWidget(QLabel("Username:"))
         top.addWidget(self._user_label)
         top.addStretch()
-        top.addWidget(QLabel("Backend:"))
-        self._backend_combo = QComboBox()
-        self._backend_combo.addItems(["ICE", "WEB"])
-        self._backend_combo.setToolTip(
-            "ICE = raw pixel data access\n"
-            "WEB = faster server-rendered images"
-        )
-        self._backend_combo.setCurrentText("ICE")
-        top.addWidget(self._backend_combo)
         root.addLayout(top)
 
         # --- Splitter (left tree | right detail) ---
@@ -317,12 +307,6 @@ class OmeroBrowserDialog(QDialog):
         self._refresh_tree()
         self._restore_tree_path()
 
-        # Restore last-used backend
-        settings2 = QSettings("omero_browser_qt", "omero_browser_qt")
-        last_backend = settings2.value(_SETTINGS_BACKEND_KEY, "ICE")
-        if last_backend in ("WEB", "ICE"):
-            self._backend_combo.setCurrentText(last_backend)
-
     def _refresh_owners(self) -> None:
         self._owner_combo.blockSignals(True)
         self._owner_combo.clear()
@@ -427,8 +411,6 @@ class OmeroBrowserDialog(QDialog):
 
         oid = self._owner_combo.currentData()
         settings.setValue(_SETTINGS_OWNER_KEY, "" if oid is None else int(oid))
-
-        settings.setValue(_SETTINGS_BACKEND_KEY, self._backend_combo.currentText())
 
         # Save the tree path as a list of OMERO object ids
         path = self._get_selected_tree_path()
@@ -716,5 +698,5 @@ class OmeroBrowserDialog(QDialog):
             dataset_id=dataset_id,
             dataset_name=dataset_name,
             path_labels=tuple(path_labels),
-            backend=self._backend_combo.currentText(),
+            backend="ICE",
         )

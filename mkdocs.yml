@@ -62,7 +62,6 @@ nav:
   - User Guide:
       - Browser Dialog: user-guide/browser-dialog.md
       - Pixel Loading: user-guide/pixel-loading.md
-      - WEB Backend: user-guide/web-backend.md
       - 3D Volume Viewer: user-guide/viewer-3d.md
       - Display Settings: user-guide/display-settings.md
   - API Reference:
@@ -72,7 +71,6 @@ nav:
       - Image Loading: api/image_loader.md
       - Rendering: api/rendering.md
       - View Backends: api/view_backends.md
-      - Web Client: api/webclient.md
       - Selection Context: api/selection_context.md
       - Tree Model: api/tree_model.md
       - Scale Bar: api/scale_bar.md
@@ -81,6 +79,6 @@ nav:
       - Simple Selection: examples/simple-selection.md
       - Structured Selection: examples/structured-selection.md
       - Pixel Loading: examples/pixel-loading.md
-      - Demo Viewer: examples/demo-viewer.md
+      - OMERO Viewer: examples/omero-viewer.md
   - Changelog: changelog.md
   - Contributing: contributing.md
