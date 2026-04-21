@@ -1237,19 +1237,21 @@
 
 <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Login dialog</strong> with server-name history (credentials are never stored)</li>
+<li><strong>Login dialog</strong> with server-name history, optional 10-minute session reuse, and runtime-only credential recall while the app remains open</li>
 <li><strong>QuPath-style browser</strong> — resizable dialog with group/owner filters, lazy-loading
   project → dataset → image tree, thumbnail preview, attribute table, and name filter</li>
 <li><strong>ICE pixel loading</strong> — full 5-D array fetch or tile-based dask lazy loading
   for large / pyramidal images</li>
-<li><strong>OMERO viewer</strong> — installable multi-channel viewer with optional 3D rendering</li>
-<li><strong>3D volume viewer</strong> — GPU-accelerated volume rendering (MIP, translucent,
-  isosurface, additive) via <a href="https://vispy.org/">vispy</a></li>
+<li><strong>OMERO viewer</strong> — installable multi-channel viewer for slices, projections,
+  playback, and channel-aware display settings</li>
+<li><strong>3D volume viewer</strong> — GPU-accelerated volume rendering with MIP,
+  Attenuated MIP, Translucent, Average, Isosurface, Additive, and
+  context-aware MinIP via <a href="https://vispy.org/">vispy</a></li>
 <li><strong>Embeddable</strong> — designed to drop into any PyQt6 application</li>
 </ul>
 <h2 id="30-second-example">30-second example<a class="headerlink" href="#30-second-example" title="Permanent link">&para;</a></h2>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span> <span class="nn">PyQt6.QtWidgets</span> <span class="kn">import</span> <span class="n">QApplication</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">OmeroGateway</span><span class="p">,</span> <span class="n">OmeroBrowserDialog</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">PyQt6.QtWidgets</span><span class="w"> </span><span class="kn">import</span> <span class="n">QApplication</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">omero_browser_qt</span><span class="w"> </span><span class="kn">import</span> <span class="n">OmeroGateway</span><span class="p">,</span> <span class="n">OmeroBrowserDialog</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">app</span> <span class="o">=</span> <span class="n">QApplication</span><span class="p">([])</span>
 <a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">gw</span> <span class="o">=</span> <span class="n">OmeroGateway</span><span class="p">()</span>

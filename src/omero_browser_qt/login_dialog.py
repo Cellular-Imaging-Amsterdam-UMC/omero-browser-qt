@@ -33,7 +33,9 @@ class LoginDialog(QDialog):
 
     On ``accept()`` the :class:`OmeroGateway` singleton is connected and
     ready to use.  The dialog pre-fills the server combo with previously
-    used hostnames (no credentials are stored).
+    used hostnames, restores runtime-only username/password values while
+    the app is open, and optionally requests short-lived OMERO session
+    reuse across restarts. The password itself is not persisted to disk.
 
     Parameters
     ----------

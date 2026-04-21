@@ -1284,7 +1284,7 @@ and this project adheres to <a href="https://semver.org/">Semantic Versioning</a
 <h2 id="015-2025-01-xx">[0.1.5] — 2025-01-XX<a class="headerlink" href="#015-2025-01-xx" title="Permanent link">&para;</a></h2>
 <h3 id="added">Added<a class="headerlink" href="#added" title="Permanent link">&para;</a></h3>
 <ul>
-<li>3D volume viewer (MIP, Translucent, Isosurface, Additive) via vispy — optional <code>viewer</code> extra</li>
+<li>3D volume viewer (MIP, Attenuated MIP, Translucent, Average, Isosurface, Additive, context-aware MinIP) via vispy — optional <code>viewer</code> extra</li>
 <li>Play/pause animation with speed control</li>
 <li>OMERO viewer rendering path for interactive image viewing</li>
 <li>Rendering metadata in <code>SelectedImageContext</code></li>
@@ -1292,12 +1292,15 @@ and this project adheres to <a href="https://semver.org/">Semantic Versioning</a
 <li><code>compute_scale_bar()</code> helper for image viewers</li>
 <li><code>get_image_display_settings()</code> for normalized channel display metadata</li>
 <li>Documentation site (MkDocs + Material)</li>
+<li>Optional short-lived OMERO session reuse via <code>Remember me for 10 minutes</code></li>
+<li>Smooth/nearest interpolation toggle for supported 3D render modes</li>
 </ul>
 <h3 id="changed">Changed<a class="headerlink" href="#changed" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Embedded 3D viewer in main window via <code>QStackedWidget</code> (was separate window)</li>
 <li>Gain/Threshold slider is now context-aware per render mode</li>
-<li>Lo/Hi/Threshold changes are debounced (3 s) to avoid excessive re-renders</li>
+<li>3D refresh timing was tightened so gain/contrast updates feel more responsive</li>
+<li>3D camera uses free Arcball rotation</li>
 </ul>
 <h2 id="014-2024-xx-xx">[0.1.4] — 2024-XX-XX<a class="headerlink" href="#014-2024-xx-xx" title="Permanent link">&para;</a></h2>
 <h3 id="added_1">Added<a class="headerlink" href="#added_1" title="Permanent link">&para;</a></h3>

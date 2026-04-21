@@ -516,6 +516,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Controls">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#slider-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slider behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -523,6 +540,17 @@
     <span class="md-ellipsis">
       
         Multi-channel rendering
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#camera-and-interaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera and interaction
       
     </span>
   </a>
@@ -1220,6 +1248,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Controls">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#slider-behavior" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slider behavior
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1227,6 +1272,17 @@
     <span class="md-ellipsis">
       
         Multi-channel rendering
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#camera-and-interaction" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Camera and interaction
       
     </span>
   </a>
@@ -1289,28 +1345,53 @@ powered by <a href="https://vispy.org/">vispy</a>.</p>
 <tr>
 <th>Mode</th>
 <th>Description</th>
+<th>Slider</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><strong>MIP</strong></td>
 <td>Maximum intensity projection through the volume</td>
+<td>Gain</td>
+</tr>
+<tr>
+<td><strong>Attenuated MIP</strong></td>
+<td>MIP with depth attenuation for stronger front-to-back separation</td>
+<td>Attenuation</td>
 </tr>
 <tr>
 <td><strong>Translucent</strong></td>
-<td>Semi-transparent volume with gamma correction (γ = 0.5)</td>
+<td>Semi-transparent volume rendering with boosted midtones and softened opacity</td>
+<td>Gain</td>
+</tr>
+<tr>
+<td><strong>Average</strong></td>
+<td>Mean intensity along the ray, useful for softer context views</td>
+<td>Gain</td>
 </tr>
 <tr>
 <td><strong>Isosurface</strong></td>
 <td>Surface rendering at the current threshold</td>
+<td>Threshold</td>
 </tr>
 <tr>
 <td><strong>Additive</strong></td>
 <td>Additive blending of all voxels</td>
+<td>Gain</td>
+</tr>
+<tr>
+<td><strong>MinIP</strong></td>
+<td>Minimum intensity projection, mainly useful for bright-background / non-fluorescence data</td>
+<td>Cutoff</td>
 </tr>
 </tbody>
 </table>
 <p>Switch modes via the <strong>Render</strong> combo box in the viewer toolbar.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>MinIP</code> is hidden automatically for fluorescence-like images because it
+usually collapses to black when the background is near zero.</p>
+</div>
 <h2 id="controls">Controls<a class="headerlink" href="#controls" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1321,16 +1402,20 @@ powered by <a href="https://vispy.org/">vispy</a>.</p>
 </thead>
 <tbody>
 <tr>
-<td><strong>Gain</strong> slider</td>
-<td>Brightness multiplier (context-aware default per render mode)</td>
+<td><strong>Mode-specific slider</strong></td>
+<td>Gain, attenuation, threshold, or cutoff depending on the current render mode</td>
 </tr>
 <tr>
 <td><strong>Lo% / Hi%</strong> spinboxes</td>
 <td>Percentile-based contrast windowing</td>
 </tr>
 <tr>
-<td><strong>Threshold</strong> slider</td>
-<td>Isosurface threshold (only visible in Isosurface mode)</td>
+<td><strong>Downsample</strong></td>
+<td>Load every 1st, 2nd, or 4th voxel in X/Y/Z while preserving physical aspect ratio</td>
+</tr>
+<tr>
+<td><strong>Smooth</strong></td>
+<td>Toggle volume interpolation between linear and nearest when supported by the current render mode</td>
 </tr>
 <tr>
 <td><strong>Channel buttons</strong></td>
@@ -1340,22 +1425,44 @@ powered by <a href="https://vispy.org/">vispy</a>.</p>
 <td><strong>2D / 3D</strong> toggle</td>
 <td>Switch between the 2D slice viewer and 3D volume view</td>
 </tr>
+<tr>
+<td><strong>Reset View</strong></td>
+<td>Reset the 3D camera framing</td>
+</tr>
 </tbody>
 </table>
+<h3 id="slider-behavior">Slider behavior<a class="headerlink" href="#slider-behavior" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Isosurface</strong>, <strong>Attenuated MIP</strong>, and <strong>MinIP</strong> update immediately while dragging because they only change a lightweight shader parameter</li>
+<li><strong>MIP</strong>, <strong>Translucent</strong>, <strong>Average</strong>, and <strong>Additive</strong> update their label live, but the expensive volume refresh is deferred slightly or applied on release to keep the slider motion smooth</li>
+</ul>
 <div class="admonition note">
-<p class="admonition-title">Debounce</p>
-<p>Lo/Hi and threshold changes are debounced with a 3-second timer to
-avoid excessive re-renders while dragging.</p>
+<p class="admonition-title">Refresh timing</p>
+<p>Contrast and gain-related 3D updates are coalesced with a short debounce
+so the UI stays responsive. The raw OMERO stack is cached locally, so
+these updates do not re-fetch the volume from the server.</p>
 </div>
 <h2 id="multi-channel-rendering">Multi-channel rendering<a class="headerlink" href="#multi-channel-rendering" title="Permanent link">&para;</a></h2>
 <p>Multiple active channels are rendered with additive blending
 (<code>set_gl_state('additive', depth_test=False)</code>). Each channel uses
 its OMERO display colour as a custom vispy colormap.</p>
+<p>For plain RGB images imported as three channels, the channel toggles are
+shown as <strong>R</strong>, <strong>G</strong>, and <strong>B</strong> with matching button colours.</p>
+<h2 id="camera-and-interaction">Camera and interaction<a class="headerlink" href="#camera-and-interaction" title="Permanent link">&para;</a></h2>
+<ul>
+<li>The 3D canvas uses an <strong>Arcball</strong> camera, so you can freely rotate the
+  volume, including upside-down views</li>
+<li>Mouse drag rotates the volume</li>
+<li>Mouse wheel zooms</li>
+<li><strong>Reset View</strong> restores a sensible framing after large rotations</li>
+</ul>
 <h2 id="performance">Performance<a class="headerlink" href="#performance" title="Permanent link">&para;</a></h2>
 <ul>
 <li>Stacks are loaded in a background thread with a progress bar</li>
-<li>Raw stacks are cached so contrast adjustments don't re-fetch data</li>
+<li>Raw stacks are cached so contrast, gain, and interpolation adjustments don't re-fetch data</li>
 <li>Only active channels are rendered</li>
+<li>Downsampling reduces voxel count in all three axes while preserving the
+  original physical aspect ratio</li>
 </ul>
 <h2 id="embedding-in-your-own-application">Embedding in your own application<a class="headerlink" href="#embedding-in-your-own-application" title="Permanent link">&para;</a></h2>
 <p>The 3D viewer in the OMERO Viewer uses vispy's <code>SceneCanvas</code> embedded as a

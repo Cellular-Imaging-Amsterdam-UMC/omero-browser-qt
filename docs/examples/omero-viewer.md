@@ -47,12 +47,15 @@ pip install "omero-browser-qt[viewer]"
 
 ### 3D viewer
 
-- **Render modes** — MIP, Translucent, Isosurface, Additive
-- **Gain slider** — brightness, context-aware defaults per render mode
-- **Threshold slider** — isosurface cutoff (Isosurface mode only)
+- **Render modes** — MIP, Attenuated MIP, Translucent, Average, Isosurface, Additive, and MinIP when appropriate for the image type
+- **Mode-aware slider** — gain, attenuation, threshold, or cutoff depending on the selected render mode
+- **Downsample** — reduce voxel density for faster 3D interaction
+- **Smooth** — toggle interpolation between linear and nearest sampling when supported by the current mode
 - **Multi-channel** — additive blending with OMERO channel colours
+- **Arcball rotation** — freely rotate the stack, including upside-down views
 - **Progress bar** — shown while loading Z-stacks
 - **Cached stacks** — contrast adjustments don't re-fetch data
+- **RGB toggles** — plain RGB images are shown as `R`, `G`, and `B`
 
 ## Architecture
 

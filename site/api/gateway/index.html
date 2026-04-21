@@ -682,10 +682,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#omero_browser_qt.gateway.OmeroGateway.try_restore_session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        try_restore_session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#omero_browser_qt.gateway.OmeroGateway.shutdown_for_exit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        shutdown_for_exit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#omero_browser_qt.gateway.OmeroGateway.get_connection" class="md-nav__link">
     <span class="md-ellipsis">
       
         get_connection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#omero_browser_qt.gateway.OmeroGateway.runtime_login_fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        runtime_login_fields
       
     </span>
   </a>
@@ -1274,10 +1307,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#omero_browser_qt.gateway.OmeroGateway.try_restore_session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        try_restore_session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#omero_browser_qt.gateway.OmeroGateway.shutdown_for_exit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        shutdown_for_exit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#omero_browser_qt.gateway.OmeroGateway.get_connection" class="md-nav__link">
     <span class="md-ellipsis">
       
         get_connection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#omero_browser_qt.gateway.OmeroGateway.runtime_login_fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        runtime_login_fields
       
     </span>
   </a>
@@ -1459,7 +1525,7 @@ error(str)
 
 
 <a href="#omero_browser_qt.gateway.OmeroGateway.connect" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">connect</span><span class="p">(</span><span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">connect</span><span class="p">(</span><span class="n">host</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">port</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">username</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">password</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">remember_session</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -1467,6 +1533,48 @@ error(str)
         <p>Open a connection to the OMERO server.</p>
 <p>Returns <em>True</em> on success.  On failure emits :pyqtSignal:<code>error</code>
 and returns <em>False</em>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="omero_browser_qt.gateway.OmeroGateway.try_restore_session" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">try_restore_session</span>
+
+
+<a href="#omero_browser_qt.gateway.OmeroGateway.try_restore_session" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">try_restore_session</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Try to reconnect using a cached OMERO session UUID.</p>
+<p>Returns <em>True</em> if the cached session was reused successfully.
+Invalid or expired cached sessions are cleared automatically.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="omero_browser_qt.gateway.OmeroGateway.shutdown_for_exit" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">shutdown_for_exit</span>
+
+
+<a href="#omero_browser_qt.gateway.OmeroGateway.shutdown_for_exit" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">shutdown_for_exit</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Release the local client at app shutdown without closing a valid cached session.</p>
 
 
     </div>
@@ -1487,6 +1595,26 @@ and returns <em>False</em>.</p>
     <div class="doc doc-contents ">
 
         <p>Return the underlying BlitzGateway or <em>None</em>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="omero_browser_qt.gateway.OmeroGateway.runtime_login_fields" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">runtime_login_fields</span>
+
+
+<a href="#omero_browser_qt.gateway.OmeroGateway.runtime_login_fields" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">runtime_login_fields</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span> <span class="o">|</span> <span class="nb">int</span><span class="p">]</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Return in-memory login values cached for the current app run only.</p>
 
 
     </div>

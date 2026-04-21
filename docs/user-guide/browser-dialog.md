@@ -16,6 +16,20 @@ The dialog is divided into:
 - **Right panel** — 256 × 256 thumbnail preview and an attribute table (dimensions, pixel sizes, acquisition date, …)
 - **Footer** — *Import* button to confirm the selection
 
+## Login and session reuse
+
+When the browser is opened through the convenience APIs or from the viewer,
+the app first tries to restore a recently cached OMERO session. If that
+fails, the login dialog is shown.
+
+The login dialog supports:
+
+- **Server history** via `QSettings`
+- **Remember me for 10 minutes** to reuse a valid OMERO session across app restarts
+- **Runtime-only username/password recall** while the app remains open
+
+The password itself is not persisted to disk.
+
 ## Quick selection API
 
 The simplest way to use the dialog is via the class-level convenience methods.

@@ -1302,12 +1302,15 @@
 </ul>
 <h3 id="3d-viewer">3D viewer<a class="headerlink" href="#3d-viewer" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>Render modes</strong> — MIP, Translucent, Isosurface, Additive</li>
-<li><strong>Gain slider</strong> — brightness, context-aware defaults per render mode</li>
-<li><strong>Threshold slider</strong> — isosurface cutoff (Isosurface mode only)</li>
+<li><strong>Render modes</strong> — MIP, Attenuated MIP, Translucent, Average, Isosurface, Additive, and MinIP when appropriate for the image type</li>
+<li><strong>Mode-aware slider</strong> — gain, attenuation, threshold, or cutoff depending on the selected render mode</li>
+<li><strong>Downsample</strong> — reduce voxel density for faster 3D interaction</li>
+<li><strong>Smooth</strong> — toggle interpolation between linear and nearest sampling when supported by the current mode</li>
 <li><strong>Multi-channel</strong> — additive blending with OMERO channel colours</li>
+<li><strong>Arcball rotation</strong> — freely rotate the stack, including upside-down views</li>
 <li><strong>Progress bar</strong> — shown while loading Z-stacks</li>
 <li><strong>Cached stacks</strong> — contrast adjustments don't re-fetch data</li>
+<li><strong>RGB toggles</strong> — plain RGB images are shown as <code>R</code>, <code>G</code>, and <code>B</code></li>
 </ul>
 <h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">&para;</a></h2>
 <p>The viewer demonstrates:</p>

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- 3D volume viewer (MIP, Translucent, Isosurface, Additive) via vispy — optional `viewer` extra
+- 3D volume viewer (MIP, Attenuated MIP, Translucent, Average, Isosurface, Additive, context-aware MinIP) via vispy — optional `viewer` extra
 - Play/pause animation with speed control
 - OMERO viewer rendering path for interactive image viewing
 - Rendering metadata in `SelectedImageContext`
@@ -17,12 +17,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `compute_scale_bar()` helper for image viewers
 - `get_image_display_settings()` for normalized channel display metadata
 - Documentation site (MkDocs + Material)
+- Optional short-lived OMERO session reuse via `Remember me for 10 minutes`
+- Smooth/nearest interpolation toggle for supported 3D render modes
 
 ### Changed
 
 - Embedded 3D viewer in main window via `QStackedWidget` (was separate window)
 - Gain/Threshold slider is now context-aware per render mode
-- Lo/Hi/Threshold changes are debounced (3 s) to avoid excessive re-renders
+- 3D refresh timing was tightened so gain/contrast updates feel more responsive
+- 3D camera uses free Arcball rotation
 
 ## [0.1.4] — 2024-XX-XX
 

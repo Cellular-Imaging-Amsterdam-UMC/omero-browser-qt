@@ -100,6 +100,11 @@ On Windows, pip installs this as a small `omero_viewer.exe` launcher in the
 active environment. From a source checkout, you can also run
 `python -m omero_browser_qt.omero_viewer`.
 
+When logging in from the viewer or browser, you can optionally enable
+**Remember me for 10 minutes**. This stores a reusable OMERO session UUID,
+not the password, and allows reconnecting after closing and reopening the
+app while that OMERO session is still valid.
+
 ## Next steps
 
 - [Browser Dialog guide](user-guide/browser-dialog.md) — learn the full UI

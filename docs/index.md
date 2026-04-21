@@ -8,14 +8,16 @@
 
 ## Features
 
-- **Login dialog** with server-name history (credentials are never stored)
+- **Login dialog** with server-name history, optional 10-minute session reuse, and runtime-only credential recall while the app remains open
 - **QuPath-style browser** — resizable dialog with group/owner filters, lazy-loading
   project → dataset → image tree, thumbnail preview, attribute table, and name filter
 - **ICE pixel loading** — full 5-D array fetch or tile-based dask lazy loading
   for large / pyramidal images
-- **OMERO viewer** — installable multi-channel viewer with optional 3D rendering
-- **3D volume viewer** — GPU-accelerated volume rendering (MIP, translucent,
-  isosurface, additive) via [vispy](https://vispy.org/)
+- **OMERO viewer** — installable multi-channel viewer for slices, projections,
+  playback, and channel-aware display settings
+- **3D volume viewer** — GPU-accelerated volume rendering with MIP,
+  Attenuated MIP, Translucent, Average, Isosurface, Additive, and
+  context-aware MinIP via [vispy](https://vispy.org/)
 - **Embeddable** — designed to drop into any PyQt6 application
 
 ## 30-second example

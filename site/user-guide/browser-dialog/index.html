@@ -441,6 +441,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#login-and-session-reuse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Login and session reuse
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#quick-selection-api" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1201,6 +1212,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#login-and-session-reuse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Login and session reuse
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#quick-selection-api" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1290,10 +1312,21 @@ projects, datasets, and images on an OMERO server.</p>
 <li><strong>Right panel</strong> — 256 × 256 thumbnail preview and an attribute table (dimensions, pixel sizes, acquisition date, …)</li>
 <li><strong>Footer</strong> — <em>Import</em> button to confirm the selection</li>
 </ul>
+<h2 id="login-and-session-reuse">Login and session reuse<a class="headerlink" href="#login-and-session-reuse" title="Permanent link">&para;</a></h2>
+<p>When the browser is opened through the convenience APIs or from the viewer,
+the app first tries to restore a recently cached OMERO session. If that
+fails, the login dialog is shown.</p>
+<p>The login dialog supports:</p>
+<ul>
+<li><strong>Server history</strong> via <code>QSettings</code></li>
+<li><strong>Remember me for 10 minutes</strong> to reuse a valid OMERO session across app restarts</li>
+<li><strong>Runtime-only username/password recall</strong> while the app remains open</li>
+</ul>
+<p>The password itself is not persisted to disk.</p>
 <h2 id="quick-selection-api">Quick selection API<a class="headerlink" href="#quick-selection-api" title="Permanent link">&para;</a></h2>
 <p>The simplest way to use the dialog is via the class-level convenience methods.
 These handle login, browsing, and returning selected images in one call:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">OmeroBrowserDialog</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">omero_browser_qt</span><span class="w"> </span><span class="kn">import</span> <span class="n">OmeroBrowserDialog</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Returns a list of OMERO ImageWrapper objects</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">images</span> <span class="o">=</span> <span class="n">OmeroBrowserDialog</span><span class="o">.</span><span class="n">select_images</span><span class="p">()</span>
@@ -1305,7 +1338,7 @@ These handle login, browsing, and returning selected images in one call:</p>
 <code>OmeroGateway</code> singleton is created automatically.</p>
 <h2 id="lower-level-api">Lower-level API<a class="headerlink" href="#lower-level-api" title="Permanent link">&para;</a></h2>
 <p>For full control over dialog lifetime:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">OmeroGateway</span><span class="p">,</span> <span class="n">LoginDialog</span><span class="p">,</span> <span class="n">OmeroBrowserDialog</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">omero_browser_qt</span><span class="w"> </span><span class="kn">import</span> <span class="n">OmeroGateway</span><span class="p">,</span> <span class="n">LoginDialog</span><span class="p">,</span> <span class="n">OmeroBrowserDialog</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">gw</span> <span class="o">=</span> <span class="n">OmeroGateway</span><span class="p">()</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">if</span> <span class="n">LoginDialog</span><span class="p">(</span><span class="n">gateway</span><span class="o">=</span><span class="n">gw</span><span class="p">)</span><span class="o">.</span><span class="n">exec</span><span class="p">():</span>
