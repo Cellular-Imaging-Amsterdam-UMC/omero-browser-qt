@@ -26,7 +26,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
-    QComboBox,
+    QCheckBox,
     QDoubleSpinBox,
     QFrame,
     QGraphicsObject,
@@ -46,6 +46,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from .widgets import ArrowComboBox
 
 # Optional 3D volume rendering via vispy
 try:
@@ -69,6 +70,12 @@ _FALLBACK_PALETTE = [
     (0, 0, 255),
     (255, 255, 0),
 ]
+_RGB_CHANNEL_NAMES = ("R", "G", "B")
+_RGB_CHANNEL_COLORS = (
+    (220, 68, 68),
+    (56, 184, 104),
+    (72, 136, 255),
+)
 
 _PROJECTION_MODES = [
     "Slice",
@@ -80,6 +87,35 @@ _PROJECTION_MODES = [
     "Local Contrast",
 ]
 _PROGRESS_Z_STEP = 5
+_VOLUME_METHODS = [
+    "mip",
+    "attenuated_mip",
+    "minip",
+    "translucent",
+    "average",
+    "iso",
+    "additive",
+]
+_VOLUME_METHOD_LABELS = {
+    "mip": "MIP",
+    "attenuated_mip": "Attenuated MIP",
+    "minip": "MinIP",
+    "translucent": "Translucent",
+    "average": "Average",
+    "iso": "Isosurface",
+    "additive": "Additive",
+}
+_VOLUME_METHOD_UI = {
+    "mip": {"label": "Gain:", "range": (1, 200), "default": 100, "role": "gain"},
+    "attenuated_mip": {"label": "Atten.:", "range": (1, 300), "default": 100, "role": "attenuation"},
+    "minip": {"label": "Cutoff:", "range": (0, 100), "default": 100, "role": "minip_cutoff"},
+    "translucent": {"label": "Gain:", "range": (1, 500), "default": 200, "role": "gain"},
+    "average": {"label": "Gain:", "range": (1, 600), "default": 180, "role": "gain"},
+    "iso": {"label": "Threshold:", "range": (0, 100), "default": 22, "role": "threshold"},
+    "additive": {"label": "Gain:", "range": (1, 200), "default": 28, "role": "gain"},
+}
+_INTERPOLATION_TOGGLE_METHODS = set(_VOLUME_METHODS) - {"iso"}
+_THREE_D_REFRESH_DEBOUNCE_MS = 150
 
 
 class _RenderCancelled(RuntimeError):
@@ -145,6 +181,60 @@ def _resolve_channel_colors(
     if len(set(colors)) == 1 and len(colors) > 1:
         colors = [_FALLBACK_PALETTE[i % len(_FALLBACK_PALETTE)] for i in range(len(colors))]
     return colors
+
+
+def _channels_look_like_rgb(channels: list[dict]) -> bool:
+    """Heuristic: detect plain RGB images imported as 3 separate channels."""
+    if len(channels) != 3:
+        return False
+
+    names = [str(ch.get("name", "")).strip().lower() for ch in channels]
+    if names in (["r", "g", "b"], ["red", "green", "blue"]):
+        return True
+
+    rgb_like = {"", "rgb", "red", "green", "blue", "r", "g", "b"}
+    if any(name not in rgb_like for name in names):
+        return False
+
+    if all(name in {"", "rgb"} for name in names):
+        return True
+
+    colors = [ch.get("color") for ch in channels]
+    canonical = set(_RGB_CHANNEL_COLORS)
+    normalized = {
+        tuple(col) for col in colors
+        if isinstance(col, tuple) and len(col) == 3 and tuple(col) in canonical
+    }
+    return len(normalized) == 3
+
+
+def _channels_look_fluorescence_like(channels: list[dict]) -> bool:
+    """Heuristic: identify fluorescence-style channels for 3D UI defaults."""
+    if not channels or _channels_look_like_rgb(channels):
+        return False
+
+    fluor_markers = (
+        "dapi", "fitc", "gfp", "yfp", "cfp", "rfp", "mcherry", "tdtomato",
+        "tritc", "cy3", "cy5", "alexa", "hoechst", "far red",
+    )
+    for ch in channels:
+        emission = ch.get("emission_wavelength")
+        if emission is not None:
+            try:
+                if float(emission) > 0:
+                    return True
+            except (TypeError, ValueError):
+                pass
+
+        name = str(ch.get("name", "")).strip().lower()
+        if any(marker in name for marker in fluor_markers):
+            return True
+
+        color = ch.get("color")
+        if isinstance(color, tuple) and len(color) == 3 and len(set(color)) > 1:
+            return True
+
+    return False
 
 
 # ======================================================================
@@ -354,6 +444,7 @@ class ZoomableImageView(QGraphicsView):
         self.setScene(self._scene)
         self._pix_item = QGraphicsPixmapItem()
         self._scene.addItem(self._pix_item)
+        self.setFrameShape(QFrame.Shape.NoFrame)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -362,9 +453,12 @@ class ZoomableImageView(QGraphicsView):
         self._scale_bar_um_per_pixel: float | None = None
         self.setStyleSheet(
             "QGraphicsView {"
+            "background: transparent;"
+            "border: 1px solid #43484d; border-radius: 18px; }"
+            "QGraphicsView QWidget {"
             "background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
-            " stop:0 #111827, stop:1 #1f2937);"
-            "border: 1px solid #334155; border-radius: 18px; }"
+            " stop:0 #141618, stop:1 #23272a);"
+            "border-radius: 17px; }"
         )
 
     def set_pixmap(self, pix: QPixmap) -> None:
@@ -884,6 +978,13 @@ class ViewerWindow(QMainWindow):
         self._view_request_id = 0
         self._rendering = False
         self._pending_render = False
+        self._vol_method_values = {
+            method: spec["default"] for method, spec in _VOLUME_METHOD_UI.items()
+        }
+        self._available_volume_methods = list(_VOLUME_METHODS)
+        self._active_vol_method = _VOLUME_METHODS[0]
+        self._vol_slider_dragging = False
+        self._vol_linear_interpolation = True
 
         # Tiled pyramid mode
         self._tiled_item: TiledImageItem | None = None
@@ -903,14 +1004,14 @@ class ViewerWindow(QMainWindow):
         main_lay.setContentsMargins(18, 18, 18, 12)
         main_lay.setSpacing(14)
         self.setStyleSheet(
-            "QMainWindow { background: #0f172a; }"
+            "QMainWindow { background: #111315; }"
             "QFrame#panel {"
             "background: transparent;"
             "border: none; border-radius: 0; }"
-            "QLabel#title { color: #e2e8f0; font-size: 22px; font-weight: 700; }"
-            "QLabel#section { color: #cbd5e1; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }"
-            "QLabel#value { color: #e2e8f0; font-size: 12px; font-weight: 600; }"
-            "QLabel#hint { color: #94a3b8; font-size: 12px; }"
+            "QLabel#title { color: #f3f4f6; font-size: 22px; font-weight: 700; }"
+            "QLabel#section { color: #d5d9dd; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }"
+            "QLabel#value { color: #eceff1; font-size: 12px; font-weight: 600; }"
+            "QLabel#hint { color: #8f969d; font-size: 12px; }"
             "QPushButton {"
             "background: #1e293b; color: #e2e8f0; border: 1px solid #334155;"
             "border-radius: 6px; padding: 6px 10px; font-weight: 600; }"
@@ -920,17 +1021,22 @@ class ViewerWindow(QMainWindow):
             "QPushButton#primary:hover { background: #38bdf8; }"
             "QPushButton#spin_step { min-width: 18px; max-width: 18px; min-height: 12px; max-height: 12px; padding: 0; border-radius: 3px; font-size: 8px; }"
             "QComboBox, QDoubleSpinBox {"
-            "background: #0f172a; color: #e2e8f0; border: 1px solid #334155;"
+            "background: #1b1e21; color: #eceff1; border: 1px solid #43484d;"
             "border-radius: 6px; padding: 4px 8px; min-height: 18px; }"
-            "QSlider::groove:horizontal { background: #1e293b; height: 6px; border-radius: 3px; }"
-            "QSlider::sub-page:horizontal { background: #38bdf8; border-radius: 3px; }"
+            "QComboBox { padding-right: 24px; }"
+            "QComboBox::drop-down {"
+            "subcontrol-origin: padding; subcontrol-position: top right;"
+            "width: 26px; background: #25292d; border-left: 1px solid #43484d;"
+            "border-top-right-radius: 6px; border-bottom-right-radius: 6px; }"
+            "QSlider::groove:horizontal { background: #262a2e; height: 6px; border-radius: 3px; }"
+            "QSlider::sub-page:horizontal { background: #8f969d; border-radius: 3px; }"
             "QSlider::handle:horizontal {"
-            "background: #f8fafc; width: 16px; margin: -6px 0; border-radius: 8px; }"
-            "QSlider::groove:vertical { background: #1e293b; width: 6px; border-radius: 3px; }"
-            "QSlider::sub-page:vertical { background: #38bdf8; border-radius: 3px; }"
+            "background: #f3f4f6; width: 16px; margin: -6px 0; border-radius: 8px; }"
+            "QSlider::groove:vertical { background: #262a2e; width: 6px; border-radius: 3px; }"
+            "QSlider::sub-page:vertical { background: #8f969d; border-radius: 3px; }"
             "QSlider::handle:vertical {"
-            "background: #f8fafc; height: 16px; margin: 0 -6px; border-radius: 8px; }"
-            "QStatusBar { background: #0b1220; color: #94a3b8; }"
+            "background: #f3f4f6; height: 16px; margin: 0 -6px; border-radius: 8px; }"
+            "QStatusBar { background: #0d0f11; color: #8f969d; }"
         )
 
         top_panel = self._make_panel()
@@ -1015,15 +1121,15 @@ class ViewerWindow(QMainWindow):
                 keys="interactive", show=False, bgcolor="#000000",
             )
             self._vispy_view = self._vispy_canvas.central_widget.add_view()
-            self._vispy_view.camera = vispy_scene.TurntableCamera(
-                fov=60, elevation=30, azimuth=45, distance=0,
+            self._vispy_view.camera = vispy_scene.ArcballCamera(
+                fov=60, distance=0,
             )
             self._view_stack.addWidget(self._vispy_canvas.native)  # index 1
         self._vispy_volumes: list = []
         self._vol_raw_stacks: list = []  # cached (stack, color, ch_idx) for contrast refresh
         self._3d_debounce = QTimer(self)
         self._3d_debounce.setSingleShot(True)
-        self._3d_debounce.setInterval(3000)
+        self._3d_debounce.setInterval(_THREE_D_REFRESH_DEBOUNCE_MS)
         self._3d_debounce.timeout.connect(self._debounced_3d_refresh)
         self._view_stack.setCurrentIndex(0)
         viewer_lay.addWidget(self._view_stack, 1)
@@ -1034,30 +1140,37 @@ class ViewerWindow(QMainWindow):
         bar3_lay.setContentsMargins(0, 0, 0, 0)
         bar3_lay.setSpacing(8)
         bar3_lay.addWidget(QLabel("Render:"))
-        self._vol_method_combo = QComboBox()
-        self._vol_method_combo.addItems(["MIP", "Translucent", "Isosurface", "Additive"])
+        self._vol_method_combo = ArrowComboBox()
         self._vol_method_combo.currentIndexChanged.connect(self._on_vol_method_changed)
         bar3_lay.addWidget(self._vol_method_combo)
         self._vol_slider_label = QLabel("Gain:")
         bar3_lay.addWidget(self._vol_slider_label)
         self._vol_thresh_slider = QSlider(Qt.Orientation.Horizontal)
         self._vol_thresh_slider.setRange(1, 200)
-        self._vol_thresh_slider.setValue(28)
+        self._vol_thresh_slider.setValue(100)
         self._vol_thresh_slider.setFixedWidth(140)
+        self._vol_thresh_slider.sliderPressed.connect(self._on_vol_slider_pressed)
         self._vol_thresh_slider.valueChanged.connect(self._on_vol_threshold_changed)
+        self._vol_thresh_slider.sliderReleased.connect(self._on_vol_slider_released)
         bar3_lay.addWidget(self._vol_thresh_slider)
-        self._vol_slider_val = QLabel("0.28")
+        self._vol_slider_val = QLabel("1.00")
         self._vol_slider_val.setFixedWidth(32)
         bar3_lay.addWidget(self._vol_slider_val)
         bar3_lay.addWidget(QLabel("Downsample:"))
-        self._vol_ds_combo = QComboBox()
+        self._vol_ds_combo = ArrowComboBox()
         self._vol_ds_combo.addItems(["1x", "2x", "4x"])
         self._vol_ds_combo.currentIndexChanged.connect(self._on_vol_downsample_changed)
         bar3_lay.addWidget(self._vol_ds_combo)
+        self._vol_interp_check = QCheckBox("Smooth")
+        self._vol_interp_check.setChecked(True)
+        self._vol_interp_check.setToolTip("Use linear interpolation instead of nearest voxel sampling.")
+        self._vol_interp_check.toggled.connect(self._on_vol_interpolation_toggled)
+        bar3_lay.addWidget(self._vol_interp_check)
         self._vol_reset_btn = QPushButton("Reset View")
         self._vol_reset_btn.clicked.connect(self._reset_vol_camera)
         bar3_lay.addWidget(self._vol_reset_btn)
         bar3_lay.addStretch()
+        self._refresh_volume_method_options()
         self._3d_bar.setVisible(False)
         viewer_lay.addWidget(self._3d_bar)
 
@@ -1100,9 +1213,9 @@ class ViewerWindow(QMainWindow):
         self._play_btn.setCheckable(True)
         self._play_btn.toggled.connect(self._on_play_toggled)
         time_lay.addWidget(self._play_btn)
-        self._speed_combo = QComboBox()
+        self._speed_combo = ArrowComboBox()
         self._speed_combo.addItems(["1x", "2x", "3x", "fast"])
-        self._speed_combo.setFixedWidth(52)
+        self._speed_combo.setFixedWidth(92)
         self._speed_combo.currentIndexChanged.connect(self._on_speed_changed)
         time_lay.addWidget(self._speed_combo)
         self._play_timer = QTimer(self)
@@ -1123,7 +1236,7 @@ class ViewerWindow(QMainWindow):
         projection_lay = QVBoxLayout(projection_panel)
         projection_lay.setContentsMargins(0, 0, 0, 0)
         projection_lay.setSpacing(0)
-        self._proj_combo = QComboBox()
+        self._proj_combo = ArrowComboBox()
         self._proj_combo.addItems(_PROJECTION_MODES)
         self._proj_combo.currentIndexChanged.connect(self._request_view_update)
         projection_lay.addWidget(self._proj_combo)
@@ -1367,10 +1480,9 @@ class ViewerWindow(QMainWindow):
         pz = self._metadata.get("pixel_size_z")
         z_scale = (pz / px) if (pz and px and px > 0) else 1.0
 
-        method = ["mip", "translucent", "iso", "additive"][self._vol_method_combo.currentIndex()]
-        slider_val = self._vol_thresh_slider.value() / 100.0
-        threshold = slider_val if method == "iso" else 0.0
-        gain = slider_val if method != "iso" else 1.0
+        method = self._current_volume_method()
+        slider_val = self._volume_slider_value(method)
+        gain = self._volume_gain(method, slider_val)
 
         total_planes = nz * len(active)
         self._begin_progress(total_planes, "Loading 3D volumes\u2026")
@@ -1397,24 +1509,22 @@ class ViewerWindow(QMainWindow):
             mid_z = min(nz // 2, stack.shape[0] - 1)
             lo, hi = self._get_contrast(stack[mid_z], ci)
 
-            fvol = stack.astype(np.float32)
-            denom = hi - lo if hi > lo else 1.0
-            fvol = (fvol - lo) / denom
-            np.clip(fvol, 0.0, 1.0, out=fvol)
-            if method == "translucent":
-                np.power(fvol, 0.5, out=fvol)  # gamma boost for translucent
-            fvol *= gain
-            np.clip(fvol, 0.0, 1.0, out=fvol)
+            fvol = self._prepare_volume_data(stack, lo, hi, method, gain)
 
-            cmap = _ChannelColormap(color)
+            cmap = _ChannelColormap(color, translucent_boost=(method == "translucent"))
             v = vispy_scene.visuals.Volume(
                 fvol,
                 parent=self._vispy_view.scene,
                 method=method,
-                threshold=threshold,
+                threshold=slider_val if self._volume_slider_role(method) == "threshold" else 0.0,
+                attenuation=slider_val if self._volume_slider_role(method) == "attenuation" else 1.0,
+                mip_cutoff=slider_val if self._volume_slider_role(method) == "mip_cutoff" else None,
+                minip_cutoff=slider_val if self._volume_slider_role(method) == "minip_cutoff" else None,
                 cmap=cmap,
+                interpolation=self._current_volume_interpolation(),
             )
-            v.transform = STTransform(scale=(1, 1, z_scale * ds))
+            # Preserve the original physical aspect ratio after voxel decimation.
+            v.transform = STTransform(scale=(ds, ds, z_scale * ds))
             v.set_gl_state('additive', depth_test=False)
             self._vispy_volumes.append(v)
 
@@ -1425,65 +1535,77 @@ class ViewerWindow(QMainWindow):
         """Re-normalize cached 3D volumes using current Lo/Hi contrast + gain."""
         if not self._vol_raw_stacks or not self._vispy_volumes:
             return
-        method = ["mip", "translucent", "iso", "additive"][self._vol_method_combo.currentIndex()]
-        gain = self._vol_thresh_slider.value() / 100.0 if method != "iso" else 1.0
+        method = self._current_volume_method()
+        slider_val = self._volume_slider_value(method)
+        gain = self._volume_gain(method, slider_val)
         for (stack, color, ci), vol in zip(self._vol_raw_stacks, self._vispy_volumes):
+            self._apply_volume_method_param(vol, method, slider_val)
+            vol.cmap = _ChannelColormap(color, translucent_boost=(method == "translucent"))
             mid_z = min(stack.shape[0] // 2, stack.shape[0] - 1)
             lo, hi = self._get_contrast(stack[mid_z], ci)
-            fvol = stack.astype(np.float32)
-            denom = hi - lo if hi > lo else 1.0
-            fvol = (fvol - lo) / denom
-            np.clip(fvol, 0.0, 1.0, out=fvol)
-            if method == "translucent":
-                np.power(fvol, 0.5, out=fvol)  # gamma boost for translucent
-            fvol *= gain
-            np.clip(fvol, 0.0, 1.0, out=fvol)
+            fvol = self._prepare_volume_data(stack, lo, hi, method, gain)
             vol.set_data(fvol)
         if hasattr(self, "_vispy_canvas"):
             self._vispy_canvas.update()
 
     def _on_vol_method_changed(self, idx: int) -> None:
-        method = ["mip", "translucent", "iso", "additive"][idx]
-        for v in self._vispy_volumes:
-            v.method = method
-        # Adapt slider role per render mode
-        if method == "iso":
-            self._vol_slider_label.setText("Threshold:")
-            self._vol_thresh_slider.setRange(0, 100)
-            self._vol_thresh_slider.setValue(22)
-            self._vol_slider_val.setText("0.22")
-        elif method == "additive":
-            self._vol_slider_label.setText("Gain:")
-            self._vol_thresh_slider.setRange(1, 200)
-            self._vol_thresh_slider.setValue(28)
-            self._vol_slider_val.setText("0.28")
-        elif method == "translucent":
-            self._vol_slider_label.setText("Gain:")
-            self._vol_thresh_slider.setRange(1, 500)
-            self._vol_thresh_slider.setValue(200)
-            self._vol_slider_val.setText("2.00")
-        else:  # mip
-            self._vol_slider_label.setText("Gain:")
-            self._vol_thresh_slider.setRange(1, 200)
-            self._vol_thresh_slider.setValue(100)
-            self._vol_slider_val.setText("1.00")
-        self._3d_debounce.start()
+        if idx < 0:
+            return
+        self._vol_method_values[self._active_vol_method] = self._vol_thresh_slider.value()
+        if idx >= len(self._available_volume_methods):
+            return
+        method = self._available_volume_methods[idx]
+        self._active_vol_method = method
+        self._set_volume_slider_ui(
+            method,
+            self._vol_method_values.get(method, _VOLUME_METHOD_UI[method]["default"]),
+        )
+        self._apply_3d_settings(immediate=True)
 
-    def _on_vol_threshold_changed(self, value: int) -> None:
-        self._vol_slider_val.setText(f"{value / 100:.2f}")
-        self._3d_debounce.start()  # restart 3-second wait
-
-    def _debounced_3d_refresh(self) -> None:
-        """Called after 3 s of no Lo/Hi/threshold/gain changes."""
+    def _on_vol_interpolation_toggled(self, checked: bool) -> None:
+        self._vol_linear_interpolation = checked
         if self._view_stack.currentIndex() != 1:
             return
-        method = ["mip", "translucent", "iso", "additive"][self._vol_method_combo.currentIndex()]
-        slider_val = self._vol_thresh_slider.value() / 100.0
-        if method == "iso":
-            for v in self._vispy_volumes:
-                v.threshold = slider_val
-        # Re-normalize contrast (applies gain for non-iso modes)
-        self._refresh_3d_contrast()
+        interpolation = self._current_volume_interpolation()
+        for vol in self._vispy_volumes:
+            vol.interpolation = interpolation
+        if hasattr(self, "_vispy_canvas"):
+            self._vispy_canvas.update()
+
+    def _on_vol_threshold_changed(self, value: int) -> None:
+        self._vol_method_values[self._current_volume_method()] = value
+        self._vol_slider_val.setText(f"{value / 100:.2f}")
+        if self._view_stack.currentIndex() != 1:
+            return
+        method = self._current_volume_method()
+        role = self._volume_slider_role(method)
+        if role in {"threshold", "attenuation", "mip_cutoff", "minip_cutoff"}:
+            for vol in self._vispy_volumes:
+                self._apply_volume_method_param(vol, method, value / 100.0)
+            if hasattr(self, "_vispy_canvas"):
+                self._vispy_canvas.update()
+            return
+        if self._vol_slider_dragging or self._vol_thresh_slider.isSliderDown():
+            self._3d_debounce.stop()
+            return
+        self._3d_debounce.start()
+
+    def _on_vol_slider_pressed(self) -> None:
+        self._vol_slider_dragging = True
+        if self._volume_slider_role(self._current_volume_method()) == "gain":
+            self._3d_debounce.stop()
+
+    def _on_vol_slider_released(self) -> None:
+        self._vol_slider_dragging = False
+        if self._view_stack.currentIndex() != 1:
+            return
+        if self._volume_slider_role(self._current_volume_method()) != "gain":
+            return
+        self._apply_3d_settings(immediate=True)
+
+    def _debounced_3d_refresh(self) -> None:
+        """Apply the latest 3D threshold/gain/contrast settings."""
+        self._apply_3d_settings(immediate=False)
 
     def _on_vol_downsample_changed(self, _idx: int) -> None:
         if self._view_stack.currentIndex() != 1:
@@ -1498,6 +1620,112 @@ class ViewerWindow(QMainWindow):
         if hasattr(self, "_vispy_view"):
             self._vispy_view.camera.set_range()
             self._vispy_canvas.update()
+
+    def _current_volume_method(self) -> str:
+        idx = self._vol_method_combo.currentIndex()
+        if idx < 0 or idx >= len(self._available_volume_methods):
+            return self._active_vol_method
+        return self._available_volume_methods[idx]
+
+    def _refresh_volume_method_options(self, channels: list[dict] | None = None) -> None:
+        current = self._active_vol_method
+        fluorescence_like = _channels_look_fluorescence_like(channels or self._display_channels())
+        methods = [m for m in _VOLUME_METHODS if m != "minip" or not fluorescence_like]
+        if current not in methods:
+            current = methods[0]
+        self._available_volume_methods = methods
+        self._active_vol_method = current
+        self._vol_method_combo.blockSignals(True)
+        self._vol_method_combo.clear()
+        self._vol_method_combo.addItems([_VOLUME_METHOD_LABELS[m] for m in methods])
+        self._vol_method_combo.setCurrentIndex(methods.index(current))
+        self._vol_method_combo.blockSignals(False)
+        self._set_volume_slider_ui(
+            current,
+            self._vol_method_values.get(current, _VOLUME_METHOD_UI[current]["default"]),
+        )
+        self._update_volume_interpolation_ui(current)
+
+    def _volume_slider_role(self, method: str | None = None) -> str:
+        method = method or self._current_volume_method()
+        return _VOLUME_METHOD_UI[method]["role"]
+
+    def _volume_slider_value(self, method: str | None = None) -> float:
+        method = method or self._current_volume_method()
+        return self._vol_thresh_slider.value() / 100.0
+
+    def _volume_gain(self, method: str, slider_val: float) -> float:
+        return slider_val if self._volume_slider_role(method) == "gain" else 1.0
+
+    def _prepare_volume_data(
+        self,
+        stack: np.ndarray,
+        lo: float,
+        hi: float,
+        method: str,
+        gain: float,
+    ) -> np.ndarray:
+        fvol = stack.astype(np.float32)
+        denom = hi - lo if hi > lo else 1.0
+        fvol = (fvol - lo) / denom
+        np.clip(fvol, 0.0, 1.0, out=fvol)
+        if method == "translucent":
+            np.power(fvol, 0.5, out=fvol)  # brighter midtones without losing depth too fast
+            fvol *= gain
+        elif method == "average":
+            # Average rendering benefits from a smooth exposure curve: it
+            # brightens faint structures without immediately clipping the
+            # whole volume, so the gain slider stays visually responsive.
+            np.power(fvol, 0.7, out=fvol)
+            fvol = 1.0 - np.exp(-(fvol * gain * 1.8))
+        else:
+            fvol *= gain
+        np.clip(fvol, 0.0, 1.0, out=fvol)
+        return fvol
+
+    def _current_volume_interpolation(self) -> str:
+        return "linear" if self._vol_linear_interpolation else "nearest"
+
+    def _update_volume_interpolation_ui(self, method: str | None = None) -> None:
+        method = method or self._current_volume_method()
+        visible = method in _INTERPOLATION_TOGGLE_METHODS
+        self._vol_interp_check.setVisible(visible)
+
+    def _apply_volume_method_param(self, vol, method: str, slider_val: float) -> None:
+        role = self._volume_slider_role(method)
+        if role == "threshold":
+            vol.threshold = slider_val
+        elif role == "attenuation":
+            vol.attenuation = slider_val
+        elif role == "mip_cutoff":
+            vol.mip_cutoff = slider_val
+        elif role == "minip_cutoff":
+            vol.minip_cutoff = slider_val
+
+    def _set_volume_slider_ui(self, method: str, value: int) -> None:
+        spec = _VOLUME_METHOD_UI[method]
+        min_val, max_val = spec["range"]
+        clamped = max(min_val, min(int(value), max_val))
+        self._vol_slider_label.setText(spec["label"])
+        self._vol_thresh_slider.blockSignals(True)
+        self._vol_thresh_slider.setRange(min_val, max_val)
+        self._vol_thresh_slider.setValue(clamped)
+        self._vol_thresh_slider.blockSignals(False)
+        self._vol_slider_val.setText(f"{clamped / 100:.2f}")
+
+    def _apply_3d_settings(self, *, immediate: bool) -> None:
+        if self._view_stack.currentIndex() != 1:
+            return
+        if immediate:
+            self._3d_debounce.stop()
+        method = self._current_volume_method()
+        slider_val = self._vol_thresh_slider.value() / 100.0
+        for vol in self._vispy_volumes:
+            vol.method = method
+            vol.interpolation = self._current_volume_interpolation()
+            if method == "iso":
+                vol.threshold = slider_val
+        self._refresh_3d_contrast()
 
     def _open_omero(self):
         try:
@@ -1566,6 +1794,7 @@ class ViewerWindow(QMainWindow):
         self._viewer.set_scale_bar_um_per_pixel(self._metadata.get("pixel_size_x"))
 
         channels = self._display_channels()
+        self._refresh_volume_method_options(channels)
         self._channel_colors = _resolve_channel_colors(channels)
         self._rebuild_channel_toggles(channels)
 
@@ -1606,6 +1835,7 @@ class ViewerWindow(QMainWindow):
             self._3d_btn.setToolTip("vispy not installed — pip install vispy")
 
         channels = self._display_channels()
+        self._refresh_volume_method_options(channels)
         self._channel_colors = _resolve_channel_colors(channels)
         self._rebuild_channel_toggles(channels)
         self._configure_dimension_controls()
@@ -1639,6 +1869,7 @@ class ViewerWindow(QMainWindow):
         self._3d_btn.setToolTip("3D viewer not available for tiled images")
 
         channels = self._display_channels()
+        self._refresh_volume_method_options(channels)
         self._channel_colors = _resolve_channel_colors(channels)
         self._rebuild_channel_toggles(channels)
 
@@ -1687,19 +1918,38 @@ class ViewerWindow(QMainWindow):
             btn.deleteLater()
         self._channel_buttons.clear()
 
+        rgb_ui = _channels_look_like_rgb(channels)
         for i, ch in enumerate(channels):
             name = ch.get("name", f"Ch{i}")
             r, g, b = self._channel_colors[i] if i < len(self._channel_colors) else (200, 200, 200)
             btn = QPushButton(name)
             btn.setCheckable(True)
             btn.setChecked(bool(ch.get("active", True)))
-            btn.setStyleSheet(
-                f"QPushButton {{ background: rgba({r},{g},{b},210); color: #020617; "
-                f"border: none; border-radius: 999px; padding: 3px 12px; font-weight: 700; }}"
-                f"QPushButton:hover {{ background: rgba({r},{g},{b},235); }}"
-                f"QPushButton:checked {{ border: 2px solid rgba(255,255,255,110); }}"
-                f"QPushButton:!checked {{ background: #1e293b; color: #94a3b8; border: 1px solid #334155; }}"
-            )
+            if rgb_ui:
+                hover_r = min(r + 24, 255)
+                hover_g = min(g + 24, 255)
+                hover_b = min(b + 24, 255)
+                off_r = max(int(r * 0.4), 42)
+                off_g = max(int(g * 0.4), 42)
+                off_b = max(int(b * 0.4), 42)
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: rgba({r},{g},{b},224); color: #f8fafc; "
+                    f"border: none; border-radius: 999px; padding: 3px 12px; font-weight: 700; }}"
+                    f"QPushButton:hover {{ background: rgba({hover_r},{hover_g},{hover_b},242); }}"
+                    f"QPushButton:checked {{ border: 2px solid rgba(255,255,255,140); }}"
+                    f"QPushButton:!checked {{ background: rgba({off_r},{off_g},{off_b},188); color: #dbe4ee; border: 1px solid rgba({r},{g},{b},155); }}"
+                )
+            else:
+                gray = max(96, min(int(0.2126 * r + 0.7152 * g + 0.0722 * b), 220))
+                hover_gray = min(gray + 18, 238)
+                text_color = "#111315" if gray >= 150 else "#f3f4f6"
+                btn.setStyleSheet(
+                    f"QPushButton {{ background: rgba({gray},{gray},{gray},216); color: {text_color}; "
+                    f"border: none; border-radius: 999px; padding: 3px 12px; font-weight: 700; }}"
+                    f"QPushButton:hover {{ background: rgba({hover_gray},{hover_gray},{hover_gray},235); }}"
+                    f"QPushButton:checked {{ border: 2px solid rgba(255,255,255,110); }}"
+                    f"QPushButton:!checked {{ background: #262a2e; color: #8f969d; border: 1px solid #43484d; }}"
+                )
             btn.toggled.connect(self._request_view_update)
             # Insert before the stretch
             self._ch_row.insertWidget(self._ch_row.count() - 1, btn)
@@ -1709,7 +1959,7 @@ class ViewerWindow(QMainWindow):
         from omero_browser_qt import get_image_display_settings
 
         settings = get_image_display_settings(self._metadata)
-        return [
+        channels = [
             {
                 "index": ch.index,
                 "name": ch.name,
@@ -1721,6 +1971,10 @@ class ViewerWindow(QMainWindow):
             }
             for ch in settings.channels
         ]
+        if _channels_look_like_rgb(channels):
+            for i, ch in enumerate(channels):
+                ch["name"] = _RGB_CHANNEL_NAMES[i]
+        return channels
 
     def _current_channel_render_settings(self) -> list[dict]:
         channels = self._display_channels()
@@ -1893,7 +2147,7 @@ class ViewerWindow(QMainWindow):
         self._pct_cache.clear()
         self._request_view_update()
         if self._view_stack.currentIndex() == 1:
-            self._3d_debounce.start()  # restart 3-second wait
+            self._3d_debounce.start()  # coalesce rapid contrast edits
 
     def _update_viewer(self, request_id: int | None = None):
         if request_id is None:
@@ -2061,14 +2315,25 @@ if _HAS_VISPY:
 
         glsl_map = ""
 
-        def __init__(self, rgb: tuple[int, int, int]):
+        def __init__(self, rgb: tuple[int, int, int], *, translucent_boost: bool = False):
             r, g, b = rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0
-            self.glsl_map = (
-                "vec4 channel_cmap(float t) {{\n"
-                "    return vec4({r:.4f} * t, {g:.4f} * t, {b:.4f} * t, "
-                "clamp(t * 1.2, 0.0, 1.0));\n"
-                "}}\n"
-            ).format(r=r, g=g, b=b)
+            if translucent_boost:
+                # Brighter midtones with a softer alpha ramp help translucent mode
+                # keep depth while making structures read more clearly.
+                self.glsl_map = (
+                    "vec4 channel_cmap(float t) {{\n"
+                    "    float c = clamp(pow(t, 0.55) * 1.18, 0.0, 1.0);\n"
+                    "    float a = clamp(pow(t, 1.35) * 0.82, 0.0, 1.0);\n"
+                    "    return vec4({r:.4f} * c, {g:.4f} * c, {b:.4f} * c, a);\n"
+                    "}}\n"
+                ).format(r=r, g=g, b=b)
+            else:
+                self.glsl_map = (
+                    "vec4 channel_cmap(float t) {{\n"
+                    "    return vec4({r:.4f} * t, {g:.4f} * t, {b:.4f} * t, "
+                    "clamp(t * 1.2, 0.0, 1.0));\n"
+                    "}}\n"
+                ).format(r=r, g=g, b=b)
             super().__init__()
 
 
@@ -2094,10 +2359,10 @@ def main():
     win.show()
     code = app.exec()
 
-    # Cleanly close the OMERO connection so the ICE communicator is
-    # destroyed before Python's global teardown.
+    # Preserve a reusable OMERO session token for a short period if one is
+    # cached, otherwise fall back to a normal disconnect.
     from omero_browser_qt import OmeroGateway
-    OmeroGateway().disconnect()
+    OmeroGateway().shutdown_for_exit()
 
     sys.exit(code)
 

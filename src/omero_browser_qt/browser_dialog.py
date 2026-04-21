@@ -29,7 +29,6 @@ from typing import Any
 from PyQt6.QtCore import QModelIndex, QSettings, QSize, QSortFilterProxyModel, Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import (
-    QComboBox,
     QDialog,
     QHBoxLayout,
     QHeaderView,
@@ -47,6 +46,7 @@ from PyQt6.QtWidgets import (
 from .gateway import OmeroGateway
 from .selection_context import SelectedImageContext
 from .tree_model import NODE_TYPE_ROLE, WRAPPER_ROLE, NodeType, OmeroTreeModel
+from .widgets import ArrowComboBox
 
 log = logging.getLogger(__name__)
 
@@ -136,6 +136,8 @@ class OmeroBrowserDialog(QDialog):
         self.setMinimumSize(600, 400)
 
         self._gw = gateway or OmeroGateway()
+        if not self._gw.is_connected():
+            self._gw.try_restore_session()
         self._model = OmeroTreeModel(self)
         self._proxy = _NameFilterProxy(self)
         self._proxy.setSourceModel(self._model)
@@ -150,12 +152,43 @@ class OmeroBrowserDialog(QDialog):
     # ==================================================================
 
     def _build_ui(self) -> None:
+        self.setStyleSheet(
+            "QDialog { background: #111315; color: #eceff1; }"
+            "QLabel { color: #d5d9dd; }"
+            "QComboBox, QLineEdit, QTreeView, QTableWidget {"
+            "background: #1b1e21; color: #eceff1; border: 1px solid #41464b;"
+            "border-radius: 6px; }"
+            "QComboBox, QLineEdit { padding: 6px 8px; }"
+            "QComboBox:focus, QLineEdit:focus, QTreeView:focus, QTableWidget:focus { border-color: #8d949b; }"
+            "QComboBox { padding-right: 24px; }"
+            "QComboBox::drop-down {"
+            "subcontrol-origin: padding; subcontrol-position: top right;"
+            "width: 26px; background: #25292d; border-left: 1px solid #41464b;"
+            "border-top-right-radius: 6px; border-bottom-right-radius: 6px; }"
+            "QTreeView { alternate-background-color: #171a1d; padding: 4px; }"
+            "QTreeView::item:selected { background: #585e65; color: #f6f7f8; }"
+            "QTreeView::item:hover { background: #2b3035; }"
+            "QHeaderView::section {"
+            "background: #262a2e; color: #eceff1; border: none; border-bottom: 1px solid #41464b;"
+            "padding: 6px 8px; font-weight: 600; }"
+            "QPushButton {"
+            "background: #1e293b; color: #e2e8f0; border: 1px solid #334155;"
+            "border-radius: 6px; padding: 6px 12px; font-weight: 600; }"
+            "QPushButton:hover { background: #273449; border-color: #475569; }"
+            "QPushButton:pressed { background: #0f172a; }"
+            "QPushButton:disabled { background: #1a1d20; color: #727980; border-color: #30353a; }"
+            "QScrollBar:vertical, QScrollBar:horizontal {"
+            "background: #181b1e; border: none; margin: 0; }"
+            "QScrollBar::handle:vertical, QScrollBar::handle:horizontal {"
+            "background: #60666d; border-radius: 5px; min-height: 24px; min-width: 24px; }"
+            "QScrollBar::add-line, QScrollBar::sub-line { background: none; border: none; }"
+        )
         root = QVBoxLayout(self)
         root.setContentsMargins(6, 6, 6, 6)
 
         # --- Title ---
         title = QLabel("OMERO")
-        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #2196F3;")
+        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #f3f4f6;")
         root.addWidget(title)
         root.addSpacing(2)
 
@@ -183,11 +216,11 @@ class OmeroBrowserDialog(QDialog):
 
         # Group / Owner combos
         filter_row = QHBoxLayout()
-        self._group_combo = QComboBox()
+        self._group_combo = ArrowComboBox()
         self._group_combo.setMinimumWidth(100)
         self._group_combo.currentIndexChanged.connect(self._on_group_changed)
         filter_row.addWidget(self._group_combo)
-        self._owner_combo = QComboBox()
+        self._owner_combo = ArrowComboBox()
         self._owner_combo.setMinimumWidth(120)
         self._owner_combo.currentIndexChanged.connect(self._on_owner_changed)
         filter_row.addWidget(self._owner_combo)
@@ -223,7 +256,7 @@ class OmeroBrowserDialog(QDialog):
         self._thumb_label.setFixedSize(QSize(260, 260))
         self._thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._thumb_label.setStyleSheet(
-            "background: #222; border: 1px solid #444; border-radius: 4px;"
+            "background: #1b1e21; border: 1px solid #41464b; border-radius: 8px;"
         )
         right_lay.addWidget(self._thumb_label, 0, Qt.AlignmentFlag.AlignHCenter)
 
@@ -239,7 +272,7 @@ class OmeroBrowserDialog(QDialog):
         self._attr_table.verticalHeader().setVisible(False)
         self._placeholder = QLabel("Select an image to view details")
         self._placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._placeholder.setStyleSheet("color: #888;")
+        self._placeholder.setStyleSheet("color: #8f969d;")
         right_lay.addWidget(self._placeholder)
         right_lay.addWidget(self._attr_table, 1)
         self._attr_table.hide()
@@ -602,6 +635,8 @@ class OmeroBrowserDialog(QDialog):
 
         while True:
             if not gw.is_connected():
+                gw.try_restore_session()
+            if not gw.is_connected():
                 dlg = LoginDialog(parent, gateway=gw)
                 if dlg.exec() != LoginDialog.DialogCode.Accepted:
                     return []
@@ -627,6 +662,8 @@ class OmeroBrowserDialog(QDialog):
         gw = gateway or OmeroGateway()
 
         while True:
+            if not gw.is_connected():
+                gw.try_restore_session()
             if not gw.is_connected():
                 dlg = LoginDialog(parent, gateway=gw)
                 if dlg.exec() != LoginDialog.DialogCode.Accepted:

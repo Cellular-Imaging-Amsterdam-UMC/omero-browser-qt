@@ -1,15 +1,16 @@
 """
 LoginDialog — PyQt6 login dialog for OMERO servers.
 
-Only the server hostname is persisted (via OmeroGateway.saved_servers);
-credentials are never stored.
+Only the server hostname is persisted directly; credentials are never
+stored. A temporary OMERO session UUID may be cached separately by the
+gateway for short-lived re-login across app restarts.
 """
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtWidgets import (
-    QComboBox,
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -22,6 +23,9 @@ from PyQt6.QtWidgets import (
 )
 
 from .gateway import OmeroGateway
+from .widgets import ArrowComboBox
+
+_REMEMBER_LOGIN_KEY = "omero_browser_qt/login/remember_session"
 
 
 class LoginDialog(QDialog):
@@ -51,44 +55,89 @@ class LoginDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
+        self.setStyleSheet(
+            "QDialog { background: #111315; color: #eceff1; }"
+            "QLabel { color: #d5d9dd; }"
+            "QLineEdit, QComboBox, QSpinBox {"
+            "background: #1d2023; color: #eceff1; border: 1px solid #43484d;"
+            "border-radius: 6px; padding: 6px 8px; }"
+            "QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border-color: #8d949b; }"
+            "QComboBox { padding-right: 24px; }"
+            "QComboBox::drop-down {"
+            "subcontrol-origin: padding; subcontrol-position: top right;"
+            "width: 26px; background: #25292d; border-left: 1px solid #43484d;"
+            "border-top-right-radius: 6px; border-bottom-right-radius: 6px; }"
+            "QSpinBox { padding-right: 44px; }"
+            "QSpinBox::up-button, QSpinBox::down-button {"
+            "width: 20px; background: #25292d; border-left: 1px solid #43484d; }"
+            "QSpinBox::up-button {"
+            "subcontrol-origin: padding; subcontrol-position: top right;"
+            "border-top-right-radius: 6px; }"
+            "QSpinBox::down-button {"
+            "subcontrol-origin: padding; subcontrol-position: bottom right;"
+            "border-bottom-right-radius: 6px; border-top: 1px solid #34393d; }"
+            "QCheckBox { color: #d5d9dd; spacing: 8px; }"
+            "QCheckBox::indicator { width: 16px; height: 16px; }"
+            "QCheckBox::indicator:unchecked {"
+            "background: #1d2023; border: 1px solid #5c636a; border-radius: 4px; }"
+            "QCheckBox::indicator:checked {"
+            "background: #c7ccd1; border: 1px solid #e7eaed; border-radius: 4px; }"
+            "QPushButton {"
+            "background: #1e293b; color: #e2e8f0; border: 1px solid #334155;"
+            "border-radius: 6px; padding: 6px 12px; font-weight: 600; }"
+            "QPushButton:hover { background: #273449; border-color: #475569; }"
+            "QPushButton:pressed { background: #0f172a; }"
+            "QPushButton:disabled { background: #1a1d20; color: #727980; border-color: #30353a; }"
+            "QProgressBar { background: #1a1d20; border: 1px solid #34393d; border-radius: 3px; }"
+            "QProgressBar::chunk { background: #aeb4ba; border-radius: 3px; }"
+        )
         layout = QVBoxLayout(self)
 
         # Title
         title = QLabel("OMERO")
-        title.setStyleSheet("font-size: 28px; font-weight: bold; color: #2196F3;")
+        title.setStyleSheet("font-size: 28px; font-weight: bold; color: #f3f4f6;")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         layout.addSpacing(8)
 
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        runtime_fields = self._gw.runtime_login_fields()
 
         # Server combo (editable — user can type a new host)
-        self._server_combo = QComboBox()
+        self._server_combo = ArrowComboBox()
         self._server_combo.setEditable(True)
         self._server_combo.setMinimumWidth(300)
         self._server_combo.addItems(OmeroGateway.saved_servers())
-        self._server_combo.setCurrentText("")
-        if self._server_combo.count() > 0:
+        self._server_combo.setCurrentText(str(runtime_fields.get("host", "")))
+        if not self._server_combo.currentText() and self._server_combo.count() > 0:
             self._server_combo.setCurrentIndex(0)
         form.addRow("Server:", self._server_combo)
 
         # Port
         self._port_spin = QSpinBox()
         self._port_spin.setRange(1, 65535)
-        self._port_spin.setValue(4064)
+        self._port_spin.setValue(int(runtime_fields.get("port", 4064)))
         form.addRow("Port:", self._port_spin)
 
         # Username
         self._user_edit = QLineEdit()
         self._user_edit.setPlaceholderText("username")
+        self._user_edit.setText(str(runtime_fields.get("username", "")))
         form.addRow("Username:", self._user_edit)
 
         # Password
         self._pass_edit = QLineEdit()
         self._pass_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self._pass_edit.setPlaceholderText("password")
+        self._pass_edit.setText(str(runtime_fields.get("password", "")))
         form.addRow("Password:", self._pass_edit)
+
+        settings = QSettings("omero_browser_qt", "omero_browser_qt")
+        self._remember_check = QCheckBox("Remember me for 10 minutes")
+        remember_last = settings.value(_REMEMBER_LOGIN_KEY, False, type=bool)
+        self._remember_check.setChecked(bool(remember_last))
+        form.addRow("", self._remember_check)
 
         layout.addLayout(form)
 
@@ -140,7 +189,17 @@ class LoginDialog(QDialog):
         from PyQt6.QtWidgets import QApplication
         QApplication.processEvents()
 
-        ok = self._gw.connect(host, port, user, pwd)
+        QSettings("omero_browser_qt", "omero_browser_qt").setValue(
+            _REMEMBER_LOGIN_KEY,
+            self._remember_check.isChecked(),
+        )
+        ok = self._gw.connect(
+            host,
+            port,
+            user,
+            pwd,
+            remember_session=self._remember_check.isChecked(),
+        )
 
         self._progress.hide()
         self._buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
