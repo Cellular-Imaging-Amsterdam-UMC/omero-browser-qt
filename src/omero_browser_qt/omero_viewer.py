@@ -1005,14 +1005,16 @@ class ViewerWindow(QMainWindow):
         main_lay.setContentsMargins(18, 18, 18, 12)
         main_lay.setSpacing(14)
         self.setStyleSheet(
-            "QMainWindow { background: #111315; }"
+            "QMainWindow { background: #111315; color: #eceff1; }"
             "QFrame#panel {"
             "background: transparent;"
             "border: none; border-radius: 0; }"
+            "QLabel { color: #d5d9dd; }"
             "QLabel#title { color: #f3f4f6; font-size: 22px; font-weight: 700; }"
             "QLabel#section { color: #d5d9dd; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }"
             "QLabel#value { color: #eceff1; font-size: 12px; font-weight: 600; }"
             "QLabel#hint { color: #8f969d; font-size: 12px; }"
+            "QCheckBox { color: #d5d9dd; spacing: 6px; }"
             "QPushButton {"
             "background: #1e293b; color: #e2e8f0; border: 1px solid #334155;"
             "border-radius: 6px; padding: 6px 10px; font-weight: 600; }"
