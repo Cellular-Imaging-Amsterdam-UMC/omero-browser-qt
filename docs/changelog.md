@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `compute_scale_bar()` helper for image viewers
 - `get_image_display_settings()` for normalized channel display metadata
 - Documentation site (MkDocs + Material)
-- Optional short-lived OMERO session reuse via `Remember me for 10 minutes`
+- Short-lived OMERO session reuse for up to ten minutes across app restarts
 - Smooth/nearest interpolation toggle for supported 3D render modes
 
 ### Changed

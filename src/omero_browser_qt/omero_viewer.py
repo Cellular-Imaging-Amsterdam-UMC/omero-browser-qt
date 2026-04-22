@@ -985,6 +985,7 @@ class ViewerWindow(QMainWindow):
         self._active_vol_method = _VOLUME_METHODS[0]
         self._vol_slider_dragging = False
         self._vol_linear_interpolation = True
+        self._vol_camera_ranges: tuple[tuple[float, float], tuple[float, float], tuple[float, float]] | None = None
 
         # Tiled pyramid mode
         self._tiled_item: TiledImageItem | None = None
@@ -1474,6 +1475,7 @@ class ViewerWindow(QMainWindow):
             v.parent = None
         self._vispy_volumes.clear()
         self._vol_raw_stacks.clear()
+        self._vol_camera_ranges = None
 
         ds = [1, 2, 4][self._vol_ds_combo.currentIndex()]
         px = self._metadata.get("pixel_size_x")
@@ -1487,6 +1489,7 @@ class ViewerWindow(QMainWindow):
         total_planes = nz * len(active)
         self._begin_progress(total_planes, "Loading 3D volumes\u2026")
         planes_loaded = 0
+        reference_shape: tuple[int, int, int] | None = None
 
         for ci, ch in active:
             offset = planes_loaded
@@ -1499,6 +1502,9 @@ class ViewerWindow(QMainWindow):
 
             stack = self._regular_channel_stack(ci, progress=_prog)
             planes_loaded += nz
+            original_shape = stack.shape
+            if reference_shape is None:
+                reference_shape = tuple(int(v) for v in original_shape)
 
             if ds > 1:
                 stack = stack[::ds, ::ds, ::ds]
@@ -1529,7 +1535,14 @@ class ViewerWindow(QMainWindow):
             self._vispy_volumes.append(v)
 
         self._end_progress()
-        self._vispy_view.camera.set_range()
+        if reference_shape is not None:
+            oz, oy, ox = reference_shape
+            self._vol_camera_ranges = (
+                (0.0, float(max(ox - 1, 0))),
+                (0.0, float(max(oy - 1, 0))),
+                (0.0, float(max(oz - 1, 0)) * z_scale),
+            )
+        self._reset_vol_camera()
 
     def _refresh_3d_contrast(self) -> None:
         """Re-normalize cached 3D volumes using current Lo/Hi contrast + gain."""
@@ -1617,9 +1630,20 @@ class ViewerWindow(QMainWindow):
             self._load_3d_volumes(active, nz)
 
     def _reset_vol_camera(self) -> None:
-        if hasattr(self, "_vispy_view"):
-            self._vispy_view.camera.set_range()
-            self._vispy_canvas.update()
+        if not hasattr(self, "_vispy_view"):
+            return
+        camera = vispy_scene.ArcballCamera(fov=60, distance=None)
+        self._vispy_view.camera = camera
+        if self._vol_camera_ranges is not None:
+            x_range, y_range, z_range = self._vol_camera_ranges
+            camera.set_range(x=x_range, y=y_range, z=z_range, margin=0.05)
+            camera.center = (
+                0.5 * (x_range[0] + x_range[1]),
+                0.5 * (y_range[0] + y_range[1]),
+                0.5 * (z_range[0] + z_range[1]),
+            )
+            camera.set_default_state()
+        self._vispy_canvas.update()
 
     def _current_volume_method(self) -> str:
         idx = self._vol_method_combo.currentIndex()

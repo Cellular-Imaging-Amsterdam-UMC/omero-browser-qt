@@ -8,9 +8,8 @@ gateway for short-lived re-login across app restarts.
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QSettings, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -25,8 +24,6 @@ from PyQt6.QtWidgets import (
 from .gateway import OmeroGateway
 from .widgets import ArrowComboBox
 
-_REMEMBER_LOGIN_KEY = "omero_browser_qt/login/remember_session"
-
 
 class LoginDialog(QDialog):
     """Modal dialog that collects OMERO credentials and connects.
@@ -34,8 +31,8 @@ class LoginDialog(QDialog):
     On ``accept()`` the :class:`OmeroGateway` singleton is connected and
     ready to use.  The dialog pre-fills the server combo with previously
     used hostnames, restores runtime-only username/password values while
-    the app is open, and optionally requests short-lived OMERO session
-    reuse across restarts. The password itself is not persisted to disk.
+    the app is open, and requests short-lived OMERO session reuse across
+    restarts. The password itself is not persisted to disk.
 
     Parameters
     ----------
@@ -78,12 +75,6 @@ class LoginDialog(QDialog):
             "QSpinBox::down-button {"
             "subcontrol-origin: padding; subcontrol-position: bottom right;"
             "border-bottom-right-radius: 6px; border-top: 1px solid #34393d; }"
-            "QCheckBox { color: #d5d9dd; spacing: 8px; }"
-            "QCheckBox::indicator { width: 16px; height: 16px; }"
-            "QCheckBox::indicator:unchecked {"
-            "background: #1d2023; border: 1px solid #5c636a; border-radius: 4px; }"
-            "QCheckBox::indicator:checked {"
-            "background: #c7ccd1; border: 1px solid #e7eaed; border-radius: 4px; }"
             "QPushButton {"
             "background: #1e293b; color: #e2e8f0; border: 1px solid #334155;"
             "border-radius: 6px; padding: 6px 12px; font-weight: 600; }"
@@ -135,12 +126,6 @@ class LoginDialog(QDialog):
         self._pass_edit.setText(str(runtime_fields.get("password", "")))
         form.addRow("Password:", self._pass_edit)
 
-        settings = QSettings("omero_browser_qt", "omero_browser_qt")
-        self._remember_check = QCheckBox("Remember me for 10 minutes")
-        remember_last = settings.value(_REMEMBER_LOGIN_KEY, False, type=bool)
-        self._remember_check.setChecked(bool(remember_last))
-        form.addRow("", self._remember_check)
-
         layout.addLayout(form)
 
         # Progress bar (hidden until connecting)
@@ -191,16 +176,12 @@ class LoginDialog(QDialog):
         from PyQt6.QtWidgets import QApplication
         QApplication.processEvents()
 
-        QSettings("omero_browser_qt", "omero_browser_qt").setValue(
-            _REMEMBER_LOGIN_KEY,
-            self._remember_check.isChecked(),
-        )
         ok = self._gw.connect(
             host,
             port,
             user,
             pwd,
-            remember_session=self._remember_check.isChecked(),
+            remember_session=True,
         )
 
         self._progress.hide()

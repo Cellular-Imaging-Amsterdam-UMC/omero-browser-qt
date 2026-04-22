@@ -13,7 +13,7 @@ Reusable PyQt6 dialog for browsing and retrieving images from [OMERO](https://ww
 
 ## Features
 
-- **Login dialog** with server-name history, optional `Remember me for 10 minutes`, and runtime-only credential recall while the app stays open
+- **Login dialog** with server-name history, automatic 10-minute OMERO session reuse, and runtime-only credential recall while the app stays open
 - **QuPath-style browser** — group/owner filters, lazy-loading tree, thumbnail preview, attribute table, and name filter
 - **ICE pixel loading** — full 5-D arrays or tile-based dask lazy loading for large / pyramidal images
 - **OMERO viewer** — installable multi-channel viewer for 2D slices, projections, channel toggling, and playback
@@ -91,8 +91,8 @@ python -m omero_browser_qt.omero_viewer
 
 See the [OMERO Viewer guide](https://cellular-imaging-amsterdam-umc.github.io/omero-browser-qt/examples/omero-viewer.html) for controls and features.
 
-The login dialog can optionally reuse a valid OMERO session for up to ten
-minutes across app restarts. The password itself is not written to disk.
+The login flow silently reuses a valid OMERO session for up to ten minutes
+across app restarts. The password itself is not written to disk.
 
 ## Documentation
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "omero-browser-qt"
-version = "0.2.1"
+version = "0.2.2"
 description = "Reusable PyQt6 dialog for browsing and retrieving images from OMERO via ICE"
 readme = "README.md"
 license = "MIT"

@@ -25,7 +25,7 @@ fails, the login dialog is shown.
 The login dialog supports:
 
 - **Server history** via `QSettings`
-- **Remember me for 10 minutes** to reuse a valid OMERO session across app restarts
+- **Automatic 10-minute session reuse** to reconnect across app restarts while the OMERO session remains valid
 - **Runtime-only username/password recall** while the app remains open
 
 The password itself is not persisted to disk.

@@ -24,7 +24,7 @@ ice_toplevel = [
 ]
 
 a = Analysis(
-    ['src/omero_browser_qt/omero_viewer.py'],
+    ['omero_viewer_launcher.py'],
     pathex=['.', 'src'],
     binaries=pyqt6_binaries + vispy_binaries + ogl_binaries + omero_binaries,
     datas=[
@@ -67,6 +67,7 @@ a = Analysis(
         'omero_browser_qt.scale_bar',
         'omero_browser_qt.selection_context',
         'omero_browser_qt.tree_model',
+        'omero_browser_qt.widgets',
         'omero_browser_qt.view_backends',
     ] + pyqt6_hiddenimports + vispy_hiddenimports + ogl_hiddenimports
       + omero_hiddenimports + ice_toplevel,
@@ -103,7 +104,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,               # enable console to capture crash output
+    console=False,               # enable console to capture crash output
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,

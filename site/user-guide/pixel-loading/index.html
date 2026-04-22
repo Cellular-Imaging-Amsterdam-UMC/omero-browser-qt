@@ -55,6 +55,8 @@
     
       <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
+      <link rel="stylesheet" href="../../stylesheets/black-theme.css">
+    
     <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
@@ -66,12 +68,10 @@
   
     
     
-      
     
     
     
-    
-    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan">
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="black" data-md-color-accent="cyan">
   
     
     <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
@@ -124,33 +124,7 @@
     </div>
     
       
-        <form class="md-header__option" data-md-component="palette">
-  
     
-    
-    
-    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
-    
-      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
-      </label>
-    
-  
-    
-    
-    
-    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="teal" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
-    
-      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
-      </label>
-    
-  
-</form>
-      
-    
-    
-      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
     
     
     
@@ -1258,7 +1232,7 @@
 all using ICE <code>RawPixelsStore</code> for direct access to stored values.</p>
 <h2 id="full-5-d-array">Full 5-D array<a class="headerlink" href="#full-5-d-array" title="Permanent link">&para;</a></h2>
 <p>For regular-sized images, fetch all channels at once:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">omero_browser_qt</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_image_data</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">load_image_data</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">load_image_data</span><span class="p">(</span><span class="n">image_wrapper</span><span class="p">)</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">volumes</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="s2">&quot;images&quot;</span><span class="p">]</span>     <span class="c1"># list of np.ndarray, one per channel</span>
@@ -1269,7 +1243,7 @@ all using ICE <code>RawPixelsStore</code> for direct access to stored values.</p
 <h2 id="large-pyramidal-images">Large / pyramidal images<a class="headerlink" href="#large-pyramidal-images" title="Permanent link">&para;</a></h2>
 <p>Images exceeding 4096 × 4096 pixels are considered "large" and loaded
 lazily via dask:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">omero_browser_qt</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_large_image</span><span class="p">,</span> <span class="n">load_image_lazy</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">is_large_image</span><span class="p">,</span> <span class="n">load_image_lazy</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">if</span> <span class="n">is_large_image</span><span class="p">(</span><span class="n">image_wrapper</span><span class="p">):</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">result</span> <span class="o">=</span> <span class="n">load_image_lazy</span><span class="p">(</span><span class="n">image_wrapper</span><span class="p">)</span>
@@ -1281,14 +1255,14 @@ of 1024 × 1024.</p>
 <h2 id="interactive-plane-provider">Interactive plane provider<a class="headerlink" href="#interactive-plane-provider" title="Permanent link">&para;</a></h2>
 <p>For slice-by-slice browsing (e.g. in a viewer), use
 <code>RegularImagePlaneProvider</code> to fetch only the planes you need:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">omero_browser_qt</span><span class="w"> </span><span class="kn">import</span> <span class="n">RegularImagePlaneProvider</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">RegularImagePlaneProvider</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">provider</span> <span class="o">=</span> <span class="n">RegularImagePlaneProvider</span><span class="p">(</span><span class="n">image_wrapper</span><span class="p">)</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">plane</span> <span class="o">=</span> <span class="n">provider</span><span class="o">.</span><span class="n">get_plane</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>   <span class="c1"># shape (Y, X)</span>
 <a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">stack</span> <span class="o">=</span> <span class="n">provider</span><span class="o">.</span><span class="n">get_stack</span><span class="p">(</span><span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>         <span class="c1"># shape (Z, Y, X)</span>
 </code></pre></div>
 <p>For pyramidal images, use <code>PyramidTileProvider</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">omero_browser_qt</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyramidTileProvider</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">PyramidTileProvider</span>
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">provider</span> <span class="o">=</span> <span class="n">PyramidTileProvider</span><span class="p">(</span><span class="n">image_wrapper</span><span class="p">)</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">tile</span> <span class="o">=</span> <span class="n">provider</span><span class="o">.</span><span class="n">get_tile</span><span class="p">(</span><span class="n">resolution</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -1297,7 +1271,7 @@ of 1024 × 1024.</p>
 <h2 id="metadata">Metadata<a class="headerlink" href="#metadata" title="Permanent link">&para;</a></h2>
 <p><code>get_image_metadata()</code> extracts dimensions, pixel type, physical pixel
 sizes, and channel information from an OMERO <code>ImageWrapper</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">omero_browser_qt</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_image_metadata</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span> <span class="nn">omero_browser_qt</span> <span class="kn">import</span> <span class="n">get_image_metadata</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">meta</span> <span class="o">=</span> <span class="n">get_image_metadata</span><span class="p">(</span><span class="n">image_wrapper</span><span class="p">)</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nb">print</span><span class="p">(</span><span class="n">meta</span><span class="p">[</span><span class="s2">&quot;size_x&quot;</span><span class="p">],</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;size_y&quot;</span><span class="p">],</span> <span class="n">meta</span><span class="p">[</span><span class="s2">&quot;size_z&quot;</span><span class="p">])</span>

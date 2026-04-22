@@ -7,24 +7,18 @@ repo_name: omero-browser-qt
 theme:
   name: material
   palette:
-    - scheme: default
-      primary: teal
-      accent: cyan
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
-    - scheme: slate
-      primary: teal
-      accent: cyan
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+    scheme: slate
+    primary: black
+    accent: cyan
   features:
     - navigation.sections
     - navigation.expand
     - navigation.top
     - content.code.copy
     - search.highlight
+
+extra_css:
+  - stylesheets/black-theme.css
 
 plugins:
   - search

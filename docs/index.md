@@ -8,7 +8,7 @@
 
 ## Features
 
-- **Login dialog** with server-name history, optional 10-minute session reuse, and runtime-only credential recall while the app remains open
+- **Login dialog** with server-name history, automatic 10-minute session reuse, and runtime-only credential recall while the app remains open
 - **QuPath-style browser** — resizable dialog with group/owner filters, lazy-loading
   project → dataset → image tree, thumbnail preview, attribute table, and name filter
 - **ICE pixel loading** — full 5-D array fetch or tile-based dask lazy loading

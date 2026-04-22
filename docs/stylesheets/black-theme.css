@@ -1,0 +1,40 @@
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: #000000;
+  --md-default-bg-color--light: #08090a;
+  --md-default-bg-color--lighter: #111315;
+  --md-default-bg-color--lightest: #1a1d20;
+  --md-default-fg-color: #f3f4f6;
+  --md-default-fg-color--light: #d0d5db;
+  --md-default-fg-color--lighter: #9aa3ad;
+  --md-default-fg-color--lightest: #6b7480;
+  --md-code-bg-color: #050607;
+  --md-typeset-a-color: #38bdf8;
+  --md-accent-fg-color: #38bdf8;
+  --md-accent-fg-color--transparent: rgba(56, 189, 248, 0.12);
+}
+
+[data-md-color-scheme="slate"] .md-header,
+[data-md-color-scheme="slate"] .md-tabs {
+  background-color: #000000;
+}
+
+[data-md-color-scheme="slate"] .md-header {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+[data-md-color-scheme="slate"] .md-tabs {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) {
+  background: #090b0d;
+}
+
+[data-md-color-scheme="slate"] .md-typeset code {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+[data-md-color-scheme="slate"] .md-nav--primary .md-nav__title[for="__drawer"],
+[data-md-color-scheme="slate"] .md-nav--primary .md-nav__title {
+  background: #000000;
+}
